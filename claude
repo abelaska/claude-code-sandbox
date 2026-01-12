@@ -166,10 +166,20 @@ echo ""
 # --cwd: Set working directory
 # -v: Volume mounts for config, workspace, and IDE settings
 
-exec container run -it --rm --ssh \
+# Trap signals to ensure clean shutdown
+cleanup() {
+    echo ""
+    echo "🛑 Shutting down container..."
+    container stop "$NAME" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+container run -it --rm --ssh \
     --cwd "$(pwd)" \
     --name "$NAME" \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \
     "$IMAGE" "${CLAUDE_ARGS[@]}"
+
+# Container exited, cleanup trap will handle the rest

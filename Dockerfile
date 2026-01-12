@@ -43,7 +43,8 @@ RUN apk add --no-cache \
     openssh-client \
     tzdata \
     jq \
-    shadow
+    shadow \
+    tini
 
 # ============================================================================
 # User Setup
@@ -163,9 +164,11 @@ VOLUME ["/home/claude"]
 # Container Entrypoint
 # ============================================================================
 # Launch Claude Code CLI with the following flags:
+#   tini: Lightweight init system to properly reap zombie processes and
+#         forward signals to child processes (MCP servers)
 #   --dangerously-skip-permissions: Skip all safety prompts (use with caution)
 #   --allow-dangerously-skip-permissions: Confirm permission bypass
 #   --ide: Enable IDE integration features
 #   --mcp-config: Specify MCP server configuration file path
 # ============================================================================
-ENTRYPOINT [ "claude", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--ide", "--mcp-config", "/mcp.json" ]
+ENTRYPOINT [ "/sbin/tini", "--", "claude", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--ide", "--mcp-config", "/mcp.json" ]
