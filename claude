@@ -2,7 +2,7 @@
 #
 # Claude Code Sandbox Container Wrapper Script
 # ======================================
-# This script runs Claude Code inside an Apple container with proper isolation
+# This script runs Claude Code inside a Docker container with proper isolation
 # while maintaining access to your workspace and git config.
 #
 # Usage: ./claude [args...]
@@ -108,25 +108,46 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 mkdir -p "$CLAUDE_DIR"
 
 # ============================================================================
-# Container System Check
+# Docker Check
 # ============================================================================
-# Ensure the container system is running before attempting to launch containers
+# Ensure Docker is running before attempting to launch containers
 
-echo "🔧 Checking container system..."
+echo "🔧 Checking Docker..."
 
-if ! container system status >/dev/null 2>&1; then
-    echo "   ⚠ Container system not running, starting..."
-    container system start >/dev/null
+if ! docker info >/dev/null 2>&1; then
+    echo "   ⚠ Docker not running, starting..."
 
-    # Verify the system started successfully
-    if container system status >/dev/null 2>&1; then
-        echo "   ✓ Container system started successfully"
+    # Platform-specific startup
+    case "$(uname -s)" in
+        Darwin)
+            if command -v orbctl &>/dev/null; then
+                orbctl start 2>/dev/null || true
+            elif [ -d "/Applications/Docker.app" ]; then
+                open -a Docker
+            fi
+            ;;
+        Linux)
+            if command -v systemctl &>/dev/null; then
+                sudo systemctl start docker 2>/dev/null || true
+            fi
+            ;;
+    esac
+
+    # Wait for Docker to be ready (up to 30 seconds)
+    attempts=0
+    while ! docker info >/dev/null 2>&1 && [ $attempts -lt 30 ]; do
+        sleep 1
+        ((attempts++))
+    done
+
+    if docker info >/dev/null 2>&1; then
+        echo "   ✓ Docker started successfully"
     else
-        echo "   ✗ Failed to start container system"
+        echo "   ✗ Failed to start Docker"
         exit 1
     fi
 else
-    echo "   ✓ Container system is running"
+    echo "   ✓ Docker is running"
 fi
 
 # ============================================================================
@@ -136,12 +157,12 @@ fi
 
 # Find the next available number for the container name
 # by checking existing containers with the same prefix
-NEXT_NUM=$(container ls -aq --format json | jq -r --arg prefix "$NAME_PREFIX" '
-  [.[]? | .configuration.id // .configuration.options.hostname // .id // empty |
-   select(startswith($prefix)) | sub("^" + $prefix; "") |
-   select(test("^[0-9]+$")) | tonumber] |
-  if length > 0 then max + 1 else 0 end
-' 2>/dev/null || echo "0")
+NEXT_NUM=$(docker ps -a --format '{{.Names}}' 2>/dev/null | \
+    grep -E "^${NAME_PREFIX}[0-9]+$" | \
+    sed "s/^${NAME_PREFIX}//" | \
+    sort -n | tail -1 | \
+    awk '{print $1 + 1}')
+NEXT_NUM=${NEXT_NUM:-0}
 
 # Generate unique container name with incremental number
 NAME="${NAME_PREFIX}${NEXT_NUM}"
@@ -208,22 +229,44 @@ echo ""
 # Build the docker run command with appropriate flags
 # -it: Interactive terminal
 # --rm: Remove container after exit
-# --ssh: Forward SSH agent
-# --cwd: Set working directory
+# -e SSH_AUTH_SOCK: Forward SSH agent (platform-specific socket path)
+# -w: Set working directory
 # -v: Volume mounts for config, workspace, and IDE settings
 
 # Trap signals to ensure clean shutdown
 cleanup() {
     echo ""
     echo "🛑 Shutting down container..."
-    container stop "$NAME" 2>/dev/null || true
+    docker stop "$NAME" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-container run -it --rm --ssh \
-    --cwd "$(pwd)" \
+# Build SSH forwarding arguments based on platform
+SSH_FORWARD_ARGS=()
+case "$(uname -s)" in
+    Darwin)
+        # macOS: Use Docker Desktop/OrbStack magic socket
+        SSH_FORWARD_ARGS=(
+            -v "/run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock"
+            -e "SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock"
+        )
+        ;;
+    Linux)
+        # Linux: Forward the actual SSH_AUTH_SOCK
+        if [ -n "$SSH_AUTH_SOCK" ]; then
+            SSH_FORWARD_ARGS=(
+                -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK"
+                -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+            )
+        fi
+        ;;
+esac
+
+docker run -it --rm \
+    -w "$(pwd)" \
     --name "$NAME" \
     --cpus "$CPUS" --memory "$MEMORY" \
+    "${SSH_FORWARD_ARGS[@]}" \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \

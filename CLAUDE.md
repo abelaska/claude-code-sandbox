@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Code Sandbox is a containerized environment for running Claude Code CLI using Apple's native container system (macOS only). The project provides an isolated, reproducible environment with full MCP (Model Context Protocol) server support, SSH agent forwarding for git operations, and persistent configuration storage.
+Claude Code Sandbox is a containerized environment for running Claude Code CLI using Docker (via OrbStack or Docker Desktop). The project provides an isolated, reproducible environment with full MCP (Model Context Protocol) server support, SSH agent forwarding for git operations, and persistent configuration storage. It supports macOS, Linux, and Windows (via WSL2).
 
 ## Architecture
 
@@ -18,16 +18,17 @@ Claude Code Sandbox is a containerized environment for running Claude Code CLI u
    - User setup: Non-root user `claude` with home at `/home/claude`
 
 2. **claude wrapper script** - Bash script that:
-   - Verifies Apple Container system is running (starts it if needed)
+   - Verifies Docker is running (starts it if needed via OrbStack, Docker Desktop, or systemctl)
    - Generates unique incremental container names (`claude-sandbox-0`, `claude-sandbox-1`, etc.)
    - Syncs `.gitconfig` from `~/.gitconfig` to `~/.claude-sandbox/.gitconfig`
    - Loads SSH keys via `ssh-add` for git operations
    - Mounts workspace and configuration directories
    - Supports `--ssh-key` flag to specify which SSH key to load
    - Automatically handles prompt arguments (positional args become prompts with `-p` flag)
+   - Platform-aware SSH agent forwarding (macOS uses Docker socket, Linux uses direct forwarding)
 
 3. **setup.sh** - Automated installation script that:
-   - Checks/starts container system
+   - Checks/starts Docker (platform-specific: OrbStack, Docker Desktop, or systemctl)
    - Builds the container image via `make build`
    - Installs wrapper to `~/.local/bin/claude-sandbox`
    - Adds `ccs` alias to shell config (bash/zsh/fish)
@@ -69,8 +70,7 @@ tini -- claude --dangerously-skip-permissions --allow-dangerously-skip-permissio
 # Automated setup (recommended)
 ./setup.sh
 
-# Manual setup steps
-container system start        # Start Apple Container system
+# Manual setup steps (Docker must be running)
 make build                    # Build container image
 ./claude                      # Run Claude Code
 ```
@@ -117,22 +117,20 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 ### Container Management
 
 ```bash
-# Container system
-container system start
-container system stop
-container system status
+# Check Docker status
+docker info
 
 # List containers
-container ps              # Running containers
-container ps -a           # All containers
+docker ps              # Running containers
+docker ps -a           # All containers
 
 # Cleanup
-container rm <name>       # Remove specific container
-container system prune    # Remove all stopped containers
+docker rm <name>       # Remove specific container
+docker system prune    # Remove all stopped containers
 
 # Image management
-make export               # Export to OCI archive (.oci file)
-make import               # Import from OCI archive
+make export               # Export to tar archive (.tar file)
+make import               # Import from tar archive
 make clean                # Remove image and archives
 ```
 
@@ -179,7 +177,9 @@ The wrapper script supports flexible SSH key loading:
 - Override: Use `--ssh-key <name>` or `--ssh-key <path>` flag
 - Before running: Ensure keys are available with `ssh-add -l`
 - The script calls `ssh-add` to load keys into the agent
-- SSH agent is forwarded into container via `--ssh` flag
+- SSH agent is forwarded into container via volume mount (platform-specific):
+  - macOS: Uses `/run/host-services/ssh-auth.sock` (Docker Desktop/OrbStack magic socket)
+  - Linux: Uses `$SSH_AUTH_SOCK` directly
 
 ### Multiple Container Instances
 
@@ -199,10 +199,15 @@ The wrapper automatically generates unique container names, allowing multiple in
 
 ### Platform Requirements
 
-- **macOS only** - Uses Apple Container system (not Docker)
-- Install with: `brew install container`
-- Commands use `container` CLI (not `docker`)
-- Image format is OCI (`.oci` files)
+- **macOS**: Docker via OrbStack (recommended) or Docker Desktop
+  - Install OrbStack: `brew install orbstack`
+  - Or download Docker Desktop from <https://docker.com/products/docker-desktop>
+- **Linux**: Docker Engine
+  - Ubuntu/Debian: `sudo apt-get install docker.io`
+  - Fedora: `sudo dnf install docker`
+- **Windows**: Docker Desktop with WSL2 backend
+- Commands use `docker` CLI
+- Image format is tar (`.tar` files for export/import)
 
 ### Git Configuration
 

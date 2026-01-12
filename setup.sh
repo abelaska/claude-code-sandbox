@@ -3,7 +3,7 @@
 # Claude Code Sandbox Setup Script
 # =================================
 # This script automates the complete setup process:
-#   1. Checks and starts the container system if needed
+#   1. Checks and starts Docker if needed
 #   2. Builds the container image using make build
 #   3. Installs the claude wrapper script to ~/.local/bin/claude-sandbox
 #   4. Adds the 'ccs' alias to your shell configuration
@@ -57,32 +57,57 @@ print_info() {
 print_header "Claude Code Sandbox Setup"
 
 # ============================================================================
-# Step 1: Check Container System
+# Step 1: Check Docker
 # ============================================================================
 
-print_header "Step 1: Container System Check"
+print_header "Step 1: Docker Check"
 
-# Check if container command exists
-if ! command -v container &> /dev/null; then
-    print_error "container command not found"
-    print_info "Install Apple Container with: brew install container"
+# Check if docker command exists
+if ! command -v docker &> /dev/null; then
+    print_error "docker command not found"
+    print_info "Install Docker via OrbStack: brew install orbstack"
+    print_info "Or install Docker Desktop from: https://docker.com/products/docker-desktop"
     exit 1
 fi
 
-print_success "container command found"
+print_success "docker command found"
 
-# Check if container system is running
-if ! container system status >/dev/null 2>&1; then
-    print_warning "Container system not running, starting..."
+# Check if Docker daemon is running
+if ! docker info >/dev/null 2>&1; then
+    print_warning "Docker is not running, attempting to start..."
 
-    if container system start; then
-        print_success "Container system started"
+    # Platform-specific startup
+    case "$(uname -s)" in
+        Darwin)
+            if command -v orbctl &>/dev/null; then
+                orbctl start 2>/dev/null || true
+            elif [ -d "/Applications/Docker.app" ]; then
+                open -a Docker
+            fi
+            ;;
+        Linux)
+            if command -v systemctl &>/dev/null; then
+                sudo systemctl start docker 2>/dev/null || true
+            fi
+            ;;
+    esac
+
+    # Wait for Docker to be ready (up to 30 seconds)
+    attempts=0
+    while ! docker info >/dev/null 2>&1 && [ $attempts -lt 30 ]; do
+        sleep 1
+        ((attempts++))
+    done
+
+    if docker info >/dev/null 2>&1; then
+        print_success "Docker started"
     else
-        print_error "Failed to start container system"
+        print_error "Failed to start Docker"
+        print_info "Please start Docker manually and try again"
         exit 1
     fi
 else
-    print_success "Container system is running"
+    print_success "Docker is running"
 fi
 
 # ============================================================================

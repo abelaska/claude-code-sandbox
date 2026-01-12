@@ -1,6 +1,6 @@
 # Claude Code Sandbox
 
-A containerized environment for running Claude Code CLI with full MCP (Model Context Protocol) server support using Apple's native container system.
+A containerized environment for running Claude Code CLI with full MCP (Model Context Protocol) server support using Docker.
 
 ## Overview
 
@@ -37,14 +37,41 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
 
 ## Prerequisites
 
-- **macOS** (Apple Silicon or Intel)
-- **Apple Container** - Native macOS containerization
+- **Docker** - Via OrbStack (recommended for macOS), Docker Desktop, or Docker Engine
 - **Claude Pro/Max subscription** OR **Anthropic API key**
 
-### Installing Apple Container
+### Supported Platforms
+
+- **macOS** (Apple Silicon or Intel)
+- **Linux** (x86_64 or ARM64)
+- **Windows** (via WSL2)
+
+### Installing Docker
+
+**macOS (OrbStack - Recommended):**
 
 ```bash
-brew install container
+brew install orbstack
+```
+
+**macOS (Docker Desktop):**
+
+Download from <https://docker.com/products/docker-desktop>
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt-get install docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+**Linux (Fedora):**
+
+```bash
+sudo dnf install docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
 ```
 
 ## Quick Start
@@ -59,7 +86,7 @@ Run the setup script to install everything:
 
 This will:
 
-1. Check and start the container system
+1. Check and start Docker if needed
 2. Build the container image
 3. Install the `claude-sandbox` wrapper to `~/.local/bin`
 4. Add the `ccs` alias to your shell config
@@ -104,11 +131,13 @@ ccs --cpus 4 --memory 4g "optimize this code"
 
 If you prefer manual setup or want to understand each step:
 
-### 1. Start Container System
+### 1. Ensure Docker is Running
+
+Docker must be running before building or running the container.
 
 ```bash
-container system start
-container system status
+# Check if Docker is running
+docker info
 ```
 
 ### 2. Build the Image
@@ -142,11 +171,12 @@ make build
 
 The `claude` wrapper script (`./claude`) handles:
 
-1. **Container system verification** - Ensures Apple Container is running and starts it if needed
+1. **Docker verification** - Ensures Docker is running and starts it if needed (OrbStack, Docker Desktop, or systemctl)
 2. **Container naming** - Generates unique incremental names (claude-sandbox-0, claude-sandbox-1, etc.)
 3. **Git config sync** - Copies your `.gitconfig` to the sandbox directory
 4. **SSH key loading** - Runs `ssh-add` to make your keys available for git operations
-5. **Container launch** - Mounts workspace and config with proper isolation
+5. **SSH agent forwarding** - Platform-aware forwarding (macOS uses Docker socket, Linux uses direct forwarding)
+6. **Container launch** - Mounts workspace and config with proper isolation
 
 ### Volume Mounts
 
@@ -189,8 +219,8 @@ Located at `/mcp.json` inside the container:
 |-----------------------|------------------------------------|
 | `make build`          | Build the container image          |
 | `make build-no-cache` | Build without cache                |
-| `make export`         | Export image to OCI archive        |
-| `make import`         | Import image from OCI archive      |
+| `make export`         | Export image to tar archive        |
+| `make import`         | Import image from tar archive      |
 | `make clean`          | Remove image and archives          |
 | `make info`           | Show image information             |
 | `make test`           | Test container with --version      |
@@ -287,16 +317,17 @@ The wrapper script supports running multiple Claude Code containers simultaneous
 ### Container Management
 
 ```bash
-# Start/stop the container system
-container system start
-container system stop
-container system status
+# Check Docker status
+docker info
 
 # List running containers
-container ps
+docker ps
+
+# List all containers (including stopped)
+docker ps -a
 
 # Remove stopped containers
-container system prune
+docker system prune
 ```
 
 ### Image Export/Import
@@ -305,7 +336,7 @@ For offline use or sharing:
 
 ```bash
 # Export
-make export  # Creates claude-code-sandbox-latest.oci
+make export  # Creates claude-code-sandbox-latest.tar
 
 # Import (on another machine)
 make import
@@ -313,16 +344,23 @@ make import
 
 ## Troubleshooting
 
-### Container System Not Running
+### Docker Not Running
 
 ```text
-Error: container system is not running
+Error: Cannot connect to the Docker daemon
 ```
 
 **Solution:**
 
 ```bash
-container system start
+# macOS with OrbStack
+orbctl start
+
+# macOS with Docker Desktop
+open -a Docker
+
+# Linux
+sudo systemctl start docker
 ```
 
 ### Image Not Found
@@ -388,13 +426,13 @@ If you encounter container name conflicts:
 
 ```bash
 # List all containers
-container ps -a
+docker ps -a
 
 # Remove stopped containers
-container rm claude-sandbox-0
+docker rm claude-sandbox-0
 
 # Or prune all stopped containers
-container system prune
+docker system prune
 ```
 
 ## Development
@@ -436,22 +474,20 @@ Edit the `claude` script to:
 - Customize container naming logic
 - Adjust git config sync behavior
 
-## Comparison: Docker vs Apple Container
+## Docker Providers
 
-| Feature         | Docker                 | Apple Container          |
-|-----------------|------------------------|--------------------------|
-| Platform        | Cross-platform         | macOS only               |
-| Integration     | Separate daemon        | Native macOS             |
-| Performance     | VM overhead            | Native virtualization    |
-| Installation    | Docker Desktop         | `brew install container` |
-| Commands        | `docker`               | `container`              |
-| Image format    | `.tar`                 | `.oci`                   |
-| Config location | `~/.claude-docker`     | `~/.claude-sandbox`      |
+This project supports multiple Docker providers:
+
+| Provider        | Platform       | Notes                                          |
+|-----------------|----------------|------------------------------------------------|
+| OrbStack        | macOS          | Recommended - lightweight, fast, low CPU usage |
+| Docker Desktop  | macOS, Windows | Full-featured, includes Kubernetes             |
+| Docker Engine   | Linux          | Native Docker daemon                           |
 
 ## Resources
 
-- [Apple Container GitHub](https://github.com/apple/container)
-- [Apple Virtualization Framework](https://developer.apple.com/documentation/virtualization)
+- [OrbStack](https://orbstack.dev) - Recommended Docker provider for macOS
+- [Docker Desktop](https://docker.com/products/docker-desktop) - Cross-platform Docker provider
 - [Claude Code Documentation](https://github.com/anthropics/claude-code)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
 

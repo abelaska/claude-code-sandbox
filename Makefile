@@ -1,15 +1,15 @@
 # Claude Code Container Makefile
-# Build and run using Apple Container (macOS native containerization)
+# Build and run using Docker (OrbStack/Docker Desktop)
 
 IMAGE_NAME := claude-code-sandbox
 IMAGE_TAG := latest
 FULL_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
-OCI_FILE := $(IMAGE_NAME)-$(IMAGE_TAG).oci
+TAR_FILE := $(IMAGE_NAME)-$(IMAGE_TAG).tar
 
 .PHONY: help build shell export import clean info
 
 help: ## Show this help message
-	@echo "Claude Code Container (Apple Container)"
+	@echo "Claude Code Container (Docker)"
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
@@ -17,33 +17,33 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 build: ## Build the container image
-	container build -t $(FULL_IMAGE) .
+	docker build -t $(FULL_IMAGE) .
 
 build-no-cache: ## Build the container image without cache
-	container build --no-cache -t $(FULL_IMAGE) .
+	docker build --no-cache -t $(FULL_IMAGE) .
 
-export: ## Export the container image to OCI archive
-	@echo "Exporting $(FULL_IMAGE) to $(OCI_FILE)..."
-	container image export $(FULL_IMAGE) $(OCI_FILE)
-	@echo "Image exported to $(OCI_FILE)"
-	@ls -lh $(OCI_FILE)
+export: ## Export the container image to tar archive
+	@echo "Exporting $(FULL_IMAGE) to $(TAR_FILE)..."
+	docker save -o $(TAR_FILE) $(FULL_IMAGE)
+	@echo "Image exported to $(TAR_FILE)"
+	@ls -lh $(TAR_FILE)
 
-import: ## Import the container image from OCI archive
-	@if [ ! -f "$(OCI_FILE)" ]; then \
-		echo "Error: $(OCI_FILE) not found"; \
+import: ## Import the container image from tar archive
+	@if [ ! -f "$(TAR_FILE)" ]; then \
+		echo "Error: $(TAR_FILE) not found"; \
 		exit 1; \
 	fi
-	container image import $(OCI_FILE)
+	docker load -i $(TAR_FILE)
 	@echo "Image imported successfully"
 
 clean: ## Remove the container image and archives
-	-container rmi $(FULL_IMAGE) 2>/dev/null
-	-rm -f $(OCI_FILE)
+	-docker rmi $(FULL_IMAGE) 2>/dev/null
+	-rm -f $(TAR_FILE)
 	@echo "Cleanup complete"
 
 info: ## Show image information
 	@echo "Image: $(FULL_IMAGE)"
-	@container images | grep $(IMAGE_NAME) 2>/dev/null || echo "Image not found"
+	@docker images | grep $(IMAGE_NAME) 2>/dev/null || echo "Image not found"
 
 test: ## Test the container by running --version
-	container run --rm $(FULL_IMAGE) --version
+	docker run --rm $(FULL_IMAGE) --version
