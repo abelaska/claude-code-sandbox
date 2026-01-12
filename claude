@@ -6,10 +6,15 @@
 # while maintaining access to your workspace and git config.
 #
 # Usage: ./claude [args...]
-#   ./claude                    # Start interactive session
-#   ./claude --debug            # Debug mode
-#   ./claude -p /workspace      # Specify workspace path
-#   ./claude "fix the bug"      # Execute specific command
+#   ./claude                              # Start interactive session
+#   ./claude --debug                      # Debug mode
+#   ./claude -p /workspace                # Specify workspace path
+#   ./claude --ssh-key id_ed25519         # Use specific SSH key
+#   ./claude --ssh-key ~/.ssh/custom_key  # Use custom key path
+#   ./claude "fix the bug"                # Execute specific command
+#
+# Environment Variables:
+#   CLAUDE_SSH_KEY    # Default SSH key to use (e.g., "id_ed25519")
 #
 # The container automatically:
 #   - Mounts your current directory as the workspace
@@ -26,6 +31,30 @@ set -e  # Exit on any error
 CLAUDE_DIR="${HOME}/.claude-sandbox"        # Persistent config directory
 IMAGE="claude-code-sandbox:latest"          # Docker image name
 NAME_PREFIX="claude-sandbox-"               # Container name prefix
+SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
+
+# ============================================================================
+# Argument Parsing
+# ============================================================================
+# Parse arguments to extract --ssh-key flag before passing to container
+
+CLAUDE_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ssh-key)
+            SSH_KEY="$2"
+            shift 2
+            ;;
+        --ssh-key=*)
+            SSH_KEY="${1#*=}"
+            shift
+            ;;
+        *)
+            CLAUDE_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
 
 echo "🚀 Claude Code Sandbox Container Launcher"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -96,9 +125,36 @@ fi
 # Setup: SSH Configuration
 # ============================================================================
 
-echo "📝 Loading SSH keys..."
+echo "🔑 Loading SSH keys..."
 
-ssh-add
+# If SSH_KEY is specified, load only that key; otherwise load all keys
+if [ -n "$SSH_KEY" ]; then
+    # Resolve the SSH key path
+    if [[ "$SSH_KEY" == /* ]] || [[ "$SSH_KEY" == ~* ]]; then
+        # Absolute path or path with ~
+        SSH_KEY_PATH="${SSH_KEY/#\~/$HOME}"
+    else
+        # Assume it's a key name in ~/.ssh/
+        SSH_KEY_PATH="$HOME/.ssh/$SSH_KEY"
+    fi
+
+    # Verify the key exists
+    if [ ! -f "$SSH_KEY_PATH" ]; then
+        echo "   ✗ SSH key not found: $SSH_KEY_PATH"
+        echo "   Available keys in ~/.ssh/:"
+        ls -1 "$HOME/.ssh/" | grep -E '^(id_|.*\.pub$)' | grep -v '\.pub$' || echo "   (none found)"
+        exit 1
+    fi
+
+    # Clear existing keys and add only the specified one
+    ssh-add -D 2>/dev/null || true
+    ssh-add "$SSH_KEY_PATH"
+    echo "   ✓ Loaded SSH key: $(basename "$SSH_KEY_PATH")"
+else
+    # Load all default keys
+    ssh-add
+    echo "   ✓ Loaded all available SSH keys"
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -116,4 +172,4 @@ exec container run -it --rm --ssh \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \
-    "$IMAGE" "$@"
+    "$IMAGE" "${CLAUDE_ARGS[@]}"
