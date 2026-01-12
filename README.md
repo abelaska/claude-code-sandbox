@@ -9,9 +9,8 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
 - **Alpine Linux base** - Lightweight and secure
 - **Bun runtime** - Fast JavaScript/TypeScript execution
 - **MCP servers** - Filesystem, memory, and fetch capabilities
-- **VSCode integration** - Automatic MCP server detection
 - **SSH agent forwarding** - Git operations with your keys
-- **Smart wrapper script** - Seamless experience
+- **Smart wrapper script** - Seamless container management
 
 ## Features
 
@@ -22,9 +21,9 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
   - `filesystem` - File operations within workspace
   - `memory` - Persistent memory/knowledge graph
   - `fetch` - HTTP requests to external APIs
-- **VSCode MCP server detection** - Automatically connects to IDE
-- **Git integration** - Uses your host `.gitconfig` and SSH keys
+- **Git integration** - Syncs your host `.gitconfig` and forwards SSH keys
 - **Persistent storage** - Configuration saved to `~/.claude-sandbox`
+- **Smart container naming** - Automatic incremental naming for multiple instances
 
 ### Development Tools Included
 
@@ -130,21 +129,23 @@ make build
 
 The `claude` wrapper script (`./claude`) handles:
 
-1. **Container system verification** - Ensures Apple Container is running
-2. **VSCode MCP detection** - Scans logs to find the MCP server port
-3. **SSH key loading** - Runs `ssh-add` to make keys available
-4. **Container launch** - Mounts workspace and config with proper isolation
+1. **Container system verification** - Ensures Apple Container is running and starts it if needed
+2. **Container naming** - Generates unique incremental names (claude-sandbox-0, claude-sandbox-1, etc.)
+3. **Git config sync** - Copies your `.gitconfig` to the sandbox directory
+4. **SSH key loading** - Runs `ssh-add` to make your keys available for git operations
+5. **Container launch** - Mounts workspace and config with proper isolation
 
 ### Volume Mounts
 
 The container mounts several directories for seamless integration:
 
 ```bash
-~/.claude-sandbox         → /home/claude        # Persistent config
-~/.claude/ide            → /home/claude/.claude/ide  # IDE settings (read-only)
-~/.gitconfig             → /home/claude/.gitconfig   # Git config (read-only)
-$(pwd)                   → $(pwd)               # Current workspace
+~/.claude-sandbox              → /home/claude                    # Persistent config (includes synced .gitconfig)
+~/.claude/ide                  → /home/claude/.claude/ide       # IDE settings (read-only)
+$(pwd)                         → $(pwd)                          # Current workspace
 ```
+
+**Note:** Your `.gitconfig` is copied to `~/.claude-sandbox/.gitconfig` and mounted into the container, ensuring git operations use your identity while maintaining isolation.
 
 ### MCP Server Configuration
 
@@ -233,13 +234,13 @@ While the container provides process isolation:
 ./claude -p /path/to/project
 ```
 
-### Working with VSCode
+### Multiple Concurrent Instances
 
-When VSCode is running with the Claude extension:
+The wrapper script supports running multiple Claude Code containers simultaneously:
 
-1. The wrapper auto-detects the MCP server port
-2. Port is forwarded to the container
-3. Claude can interact with your IDE
+1. Each container gets a unique name (claude-sandbox-0, claude-sandbox-1, etc.)
+2. Containers are automatically cleaned up when the session ends (`--rm` flag)
+3. You can run Claude in different project directories at the same time
 
 ### Container Management
 
@@ -308,23 +309,22 @@ ssh-add ~/.ssh/id_rsa  # or your key path
 ssh-add -l
 ```
 
-### VSCode MCP Server Not Detected
+### Git Operations Fail
 
-```text
-ℹ No MCP server detected (VSCode integration unavailable)
+If git operations fail inside the container:
+
+**Solution:**
+
+```bash
+# Ensure your SSH keys are added to the agent
+ssh-add ~/.ssh/id_rsa  # or your key path
+
+# Verify keys are loaded
+ssh-add -l
+
+# Ensure git config is present
+cat ~/.gitconfig
 ```
-
-**This is normal if:**
-
-- VSCode is not running
-- Claude VSCode extension is not installed
-- You're using a different editor
-
-**To enable:**
-
-1. Install VSCode
-2. Install the Claude Code extension
-3. Ensure extension is active
 
 ### Permission Denied on Wrapper Script
 
@@ -338,15 +338,22 @@ Permission denied: ./claude
 chmod +x ./claude
 ```
 
-### Port Already in Use
+### Container Name Conflicts
 
-If VSCode MCP port conflicts occur:
+If you encounter container name conflicts:
 
 **Solution:**
 
-- Close other Claude Code instances
-- Restart VSCode
-- Check for zombie containers: `container ps -a`
+```bash
+# List all containers
+container ps -a
+
+# Remove stopped containers
+container rm claude-sandbox-0
+
+# Or prune all stopped containers
+container system prune
+```
 
 ## Development
 
@@ -384,7 +391,8 @@ Edit the `claude` script to:
 - Change mount points
 - Add environment variables
 - Modify container runtime flags
-- Customize VSCode detection logic
+- Customize container naming logic
+- Adjust git config sync behavior
 
 ## Comparison: Docker vs Apple Container
 

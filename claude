@@ -2,7 +2,7 @@
 #
 # Claude Code Sandbox Container Wrapper Script
 # ======================================
-# This script runs Claude Code inside a Apple container with proper isolation
+# This script runs Claude Code inside an Apple container with proper isolation
 # while maintaining access to your workspace and git config.
 #
 # Usage: ./claude [args...]
@@ -13,8 +13,8 @@
 #
 # The container automatically:
 #   - Mounts your current directory as the workspace
-#   - Shares your git configuration and SSH keys
-#   - Connects to the VSCode MCP server (if detected)
+#   - Syncs your git configuration and forwards SSH keys
+#   - Generates unique container names for multiple instances
 #   - Cleans up when the session ends (--rm flag)
 
 set -e  # Exit on any error
@@ -52,44 +52,6 @@ if ! container system status >/dev/null 2>&1; then
     fi
 else
     echo "   ✓ Container system is running"
-fi
-
-# ============================================================================
-# VSCode MCP Server Detection
-# ============================================================================
-# The MCP (Model Context Protocol) server allows Claude to interact with VSCode.
-# We search the VSCode logs to find the port number the server is running on.
-
-echo "🔍 Detecting VSCode MCP server..."
-
-VSCODE_LOGS_DIR="$HOME/Library/Application Support/Code/logs"
-VSCODE_PORT=""
-
-if [ -d "$VSCODE_LOGS_DIR" ]; then
-    # Find the most recent log directory
-    LATEST_LOG=$(ls -t "$VSCODE_LOGS_DIR" | head -1)
-
-    if [ -n "$LATEST_LOG" ]; then
-        LOG_PATH="$VSCODE_LOGS_DIR/$LATEST_LOG"
-
-        # Search for the Claude VSCode extension log
-        for log in "$LOG_PATH/window"*/exthost/Anthropic.claude-code/"Claude VSCode.log"; do
-            if [ -f "$log" ]; then
-                # Extract the port number from the log file
-                VSCODE_PORT=$(grep -o "MCP Server running on port [0-9]*" "$log" 2>/dev/null | tail -1 | grep -o "[0-9]*$")
-
-                if [ -n "$VSCODE_PORT" ]; then
-                    break
-                fi
-            fi
-        done
-    fi
-fi
-
-if [ -n "$VSCODE_PORT" ]; then
-    echo "   ✓ MCP server found on port $VSCODE_PORT"
-else
-    echo "   ℹ No MCP server detected (VSCode integration unavailable)"
 fi
 
 # ============================================================================
@@ -151,7 +113,6 @@ echo ""
 exec container run -it --rm --ssh \
     --cwd "$(pwd)" \
     --name "$NAME" \
-    $([ -n "$VSCODE_PORT" ] && echo "-p $VSCODE_PORT:$VSCODE_PORT") \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \
