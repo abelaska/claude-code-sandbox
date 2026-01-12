@@ -1,0 +1,158 @@
+#!/bin/bash
+#
+# Claude Code Sandbox Container Wrapper Script
+# ======================================
+# This script runs Claude Code inside a Apple container with proper isolation
+# while maintaining access to your workspace and git config.
+#
+# Usage: ./claude [args...]
+#   ./claude                    # Start interactive session
+#   ./claude --debug            # Debug mode
+#   ./claude -p /workspace      # Specify workspace path
+#   ./claude "fix the bug"      # Execute specific command
+#
+# The container automatically:
+#   - Mounts your current directory as the workspace
+#   - Shares your git configuration and SSH keys
+#   - Connects to the VSCode MCP server (if detected)
+#   - Cleans up when the session ends (--rm flag)
+
+set -e  # Exit on any error
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+CLAUDE_DIR="${HOME}/.claude-sandbox"        # Persistent config directory
+IMAGE="claude-code-sandbox:latest"          # Docker image name
+NAME_PREFIX="claude-sandbox-"               # Container name prefix
+
+echo "🚀 Claude Code Sandbox Container Launcher"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+mkdir -p "$CLAUDE_DIR"
+
+# ============================================================================
+# Container System Check
+# ============================================================================
+# Ensure the container system is running before attempting to launch containers
+
+echo "🔧 Checking container system..."
+
+if ! container system status >/dev/null 2>&1; then
+    echo "   ⚠ Container system not running, starting..."
+    container system start >/dev/null
+
+    # Verify the system started successfully
+    if container system status >/dev/null 2>&1; then
+        echo "   ✓ Container system started successfully"
+    else
+        echo "   ✗ Failed to start container system"
+        exit 1
+    fi
+else
+    echo "   ✓ Container system is running"
+fi
+
+# ============================================================================
+# VSCode MCP Server Detection
+# ============================================================================
+# The MCP (Model Context Protocol) server allows Claude to interact with VSCode.
+# We search the VSCode logs to find the port number the server is running on.
+
+echo "🔍 Detecting VSCode MCP server..."
+
+VSCODE_LOGS_DIR="$HOME/Library/Application Support/Code/logs"
+VSCODE_PORT=""
+
+if [ -d "$VSCODE_LOGS_DIR" ]; then
+    # Find the most recent log directory
+    LATEST_LOG=$(ls -t "$VSCODE_LOGS_DIR" | head -1)
+
+    if [ -n "$LATEST_LOG" ]; then
+        LOG_PATH="$VSCODE_LOGS_DIR/$LATEST_LOG"
+
+        # Search for the Claude VSCode extension log
+        for log in "$LOG_PATH/window"*/exthost/Anthropic.claude-code/"Claude VSCode.log"; do
+            if [ -f "$log" ]; then
+                # Extract the port number from the log file
+                VSCODE_PORT=$(grep -o "MCP Server running on port [0-9]*" "$log" 2>/dev/null | tail -1 | grep -o "[0-9]*$")
+
+                if [ -n "$VSCODE_PORT" ]; then
+                    break
+                fi
+            fi
+        done
+    fi
+fi
+
+if [ -n "$VSCODE_PORT" ]; then
+    echo "   ✓ MCP server found on port $VSCODE_PORT"
+else
+    echo "   ℹ No MCP server detected (VSCode integration unavailable)"
+fi
+
+# ============================================================================
+# Container Launch
+# ============================================================================
+# Generate a unique container name and launch with all necessary mounts
+
+# Find the next available number for the container name
+# by checking existing containers with the same prefix
+NEXT_NUM=$(container ls -aq --format json | jq -r --arg prefix "$NAME_PREFIX" '
+  [.[]? | .configuration.id // .configuration.options.hostname // .id // empty |
+   select(startswith($prefix)) | sub("^" + $prefix; "") |
+   select(test("^[0-9]+$")) | tonumber] |
+  if length > 0 then max + 1 else 0 end
+' 2>/dev/null || echo "0")
+
+# Generate unique container name with incremental number
+NAME="${NAME_PREFIX}${NEXT_NUM}"
+
+echo "🐳 Launching container: $NAME"
+echo "📁 Workspace: $(pwd)"
+
+# ============================================================================
+# Setup: Git Configuration
+# ============================================================================
+
+echo "📝 Syncing git configuration..."
+
+if [ -f "$HOME/.gitconfig" ]; then
+    # Copy gitconfig to sandbox directory if it doesn't exist or is outdated
+    if [ ! -f "$CLAUDE_DIR/.gitconfig" ] || [ "$HOME/.gitconfig" -nt "$CLAUDE_DIR/.gitconfig" ]; then
+        cp -f "$HOME/.gitconfig" "$CLAUDE_DIR/.gitconfig"
+        echo "   ✓ Git config copied to sandbox"
+    else
+        echo "   ℹ Git config already up to date"
+    fi
+else
+    echo "   ⚠ No .gitconfig found in $HOME"
+fi
+
+# ============================================================================
+# Setup: SSH Configuration
+# ============================================================================
+
+echo "📝 Loading SSH keys..."
+
+ssh-add
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Build the docker run command with appropriate flags
+# -it: Interactive terminal
+# --rm: Remove container after exit
+# --ssh: Forward SSH agent
+# --cwd: Set working directory
+# -v: Volume mounts for config, workspace, and IDE settings
+
+exec container run -it --rm --ssh \
+    --cwd "$(pwd)" \
+    --name "$NAME" \
+    $([ -n "$VSCODE_PORT" ] && echo "-p $VSCODE_PORT:$VSCODE_PORT") \
+    -v "$CLAUDE_DIR:/home/claude" \
+    -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
+    -v "$(pwd):$(pwd)" \
+    "$IMAGE" "$@"

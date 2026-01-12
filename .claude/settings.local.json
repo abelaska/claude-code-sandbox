@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(container system status)",
+      "Bash(chmod:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
