@@ -230,6 +230,7 @@ echo ""
 # -it: Interactive terminal
 # --rm: Remove container after exit
 # -e SSH_AUTH_SOCK: Forward SSH agent (platform-specific socket path)
+# --group-add: Add socket's group for SSH access (macOS)
 # -w: Set working directory
 # -v: Volume mounts for config, workspace, and IDE settings
 
@@ -246,10 +247,18 @@ SSH_FORWARD_ARGS=()
 case "$(uname -s)" in
     Darwin)
         # macOS: Use Docker Desktop/OrbStack magic socket
+        # The socket is owned by the host user with a dynamic group ID
+        # We need to add that group to the container to access the socket
+        SSH_SOCKET="/run/host-services/ssh-auth.sock"
         SSH_FORWARD_ARGS=(
-            -v "/run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock"
-            -e "SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock"
+            -v "${SSH_SOCKET}:${SSH_SOCKET}"
+            -e "SSH_AUTH_SOCK=${SSH_SOCKET}"
         )
+        # Get the socket's group ID dynamically (it varies per machine)
+        SOCKET_GID=$(docker run --rm -v "${SSH_SOCKET}:${SSH_SOCKET}" alpine:latest stat -c '%g' "${SSH_SOCKET}" 2>/dev/null || echo "")
+        if [ -n "$SOCKET_GID" ]; then
+            SSH_FORWARD_ARGS+=(--group-add "$SOCKET_GID")
+        fi
         ;;
     Linux)
         # Linux: Forward the actual SSH_AUTH_SOCK

@@ -179,6 +179,7 @@ The wrapper script supports flexible SSH key loading:
 - The script calls `ssh-add` to load keys into the agent
 - SSH agent is forwarded into container via volume mount (platform-specific):
   - macOS: Uses `/run/host-services/ssh-auth.sock` (Docker Desktop/OrbStack magic socket)
+    - The socket's group ID is detected dynamically and added via `--group-add`
   - Linux: Uses `$SSH_AUTH_SOCK` directly
 
 ### Multiple Container Instances
