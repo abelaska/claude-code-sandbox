@@ -24,6 +24,7 @@ Claude Code Sandbox is a containerized environment for running Claude Code CLI u
    - Loads SSH keys via `ssh-add` for git operations
    - Mounts workspace and configuration directories
    - Supports `--ssh-key` flag to specify which SSH key to load
+   - Automatically handles prompt arguments (positional args become prompts with `-p` flag)
 
 3. **setup.sh** - Automated installation script that:
    - Checks/starts container system
@@ -95,10 +96,16 @@ ccs                     # If setup.sh was run
 ./claude --ssh-key ~/.ssh/custom_key
 export CLAUDE_SSH_KEY=id_ed25519; ./claude
 
-# Pass arguments directly
+# Pass prompts directly (automatically converted to -p flag)
 ./claude "fix the bug"
+./claude "analyze the performance bottleneck"
+
+# Pass Claude CLI flags
 ./claude --debug
 ./claude -p /path/to/workspace
+
+# Combine flags and prompts
+./claude --debug "show error logs"
 ```
 
 ### Container Management
@@ -157,6 +164,7 @@ The `claude` wrapper script can be modified to:
 - Add additional environment variables
 - Adjust container naming logic
 - Change git config sync behavior
+- Customize prompt argument parsing (see `Argument Parsing` section)
 
 ### SSH Key Management
 

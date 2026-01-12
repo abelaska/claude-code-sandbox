@@ -83,8 +83,13 @@ ccs
 # Or use the full command
 claude-sandbox
 
-# Pass arguments directly
+# Execute specific prompts
 ccs "help me refactor this code"
+ccs "fix the bug in authentication"
+
+# Pass Claude CLI flags
+ccs --debug
+ccs -p /path/to/workspace
 ```
 
 ## Manual Setup
@@ -224,14 +229,16 @@ While the container provides process isolation:
 ### Running Specific Commands
 
 ```bash
-# Execute a specific prompt
+# Execute specific prompts (automatically handled without -p flag)
 ./claude "analyze the performance of this code"
+./claude "fix the bug in login flow"
 
-# Debug mode
+# Pass Claude CLI flags
 ./claude --debug
-
-# Specify workspace path
 ./claude -p /path/to/project
+
+# Combine flags and prompts
+./claude --debug "show me the error logs"
 ```
 
 ### Multiple Concurrent Instances

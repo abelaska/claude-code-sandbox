@@ -11,7 +11,8 @@
 #   ./claude -p /workspace                # Specify workspace path
 #   ./claude --ssh-key id_ed25519         # Use specific SSH key
 #   ./claude --ssh-key ~/.ssh/custom_key  # Use custom key path
-#   ./claude "fix the bug"                # Execute specific command
+#   ./claude "fix the bug"                # Execute prompt (auto-converted to -p)
+#   ./claude --debug "analyze logs"       # Combine flags and prompts
 #
 # Environment Variables:
 #   CLAUDE_SSH_KEY    # Default SSH key to use (e.g., "id_ed25519")
@@ -36,9 +37,12 @@ SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
 # ============================================================================
 # Argument Parsing
 # ============================================================================
-# Parse arguments to extract --ssh-key flag before passing to container
+# Parse arguments to extract --ssh-key flag and detect prompts.
+# Positional arguments (non-flags) are treated as prompts and automatically
+# prefixed with -p for the Claude CLI.
 
 CLAUDE_ARGS=()
+PROMPT_ARG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --ssh-key)
@@ -49,12 +53,34 @@ while [[ $# -gt 0 ]]; do
             SSH_KEY="${1#*=}"
             shift
             ;;
-        *)
+        -p|--print)
+            # User explicitly passed -p, use next arg as prompt
             CLAUDE_ARGS+=("$1")
+            shift
+            ;;
+        -*)
+            # Other flags, pass through
+            CLAUDE_ARGS+=("$1")
+            shift
+            ;;
+        *)
+            # Positional argument - treat as prompt if no flag prefix
+            # Store it to add with -p later
+            if [[ -z "$PROMPT_ARG" ]]; then
+                PROMPT_ARG="$1"
+            else
+                # Multiple positional args - just pass through
+                CLAUDE_ARGS+=("$1")
+            fi
             shift
             ;;
     esac
 done
+
+# If we have a prompt argument without -p flag, add it properly
+if [[ -n "$PROMPT_ARG" ]]; then
+    CLAUDE_ARGS+=("-p" "$PROMPT_ARG")
+fi
 
 echo "🚀 Claude Code Sandbox Container Launcher"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
