@@ -96,6 +96,11 @@ ccs                     # If setup.sh was run
 ./claude --ssh-key ~/.ssh/custom_key
 export CLAUDE_SSH_KEY=id_ed25519; ./claude
 
+# Configure resource limits
+./claude --cpus 4                # Allocate 4 CPUs
+./claude --memory 4g             # Set memory limit to 4GB
+./claude --cpus 2 --memory 2g    # Combine both settings
+
 # Pass prompts directly (automatically converted to -p flag)
 ./claude "fix the bug"
 ./claude "analyze the performance bottleneck"
@@ -106,6 +111,7 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 
 # Combine flags and prompts
 ./claude --debug "show error logs"
+./claude --cpus 4 --memory 4g "optimize this code"
 ```
 
 ### Container Management

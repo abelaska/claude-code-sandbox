@@ -87,9 +87,17 @@ claude-sandbox
 ccs "help me refactor this code"
 ccs "fix the bug in authentication"
 
+# Configure resource limits
+ccs --cpus 4                      # Allocate 4 CPUs
+ccs --memory 4g                   # Set memory limit to 4GB
+ccs --cpus 2 --memory 2g          # Combine both settings
+
 # Pass Claude CLI flags
 ccs --debug
 ccs -p /path/to/workspace
+
+# Combine resource limits with other flags
+ccs --cpus 4 --memory 4g "optimize this code"
 ```
 
 ## Manual Setup
@@ -240,6 +248,33 @@ While the container provides process isolation:
 # Combine flags and prompts
 ./claude --debug "show me the error logs"
 ```
+
+### Resource Configuration
+
+Control CPU and memory allocation for the container:
+
+```bash
+# Allocate 4 CPUs
+./claude --cpus 4
+
+# Set memory limit to 4GB
+./claude --memory 4g
+
+# Combine both settings
+./claude --cpus 2 --memory 2g
+
+# Use with other flags
+./claude --cpus 4 --memory 4g --debug "analyze this codebase"
+
+# Alternative syntax with equals sign
+./claude --cpus=4 --memory=4g
+```
+
+**Default values:**
+- CPUs: 8
+- Memory: 8g
+
+**Tip:** Lower resource limits are useful when running multiple containers simultaneously or on systems with limited resources.
 
 ### Multiple Concurrent Instances
 

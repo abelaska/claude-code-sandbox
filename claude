@@ -11,6 +11,8 @@
 #   ./claude -p /workspace                # Specify workspace path
 #   ./claude --ssh-key id_ed25519         # Use specific SSH key
 #   ./claude --ssh-key ~/.ssh/custom_key  # Use custom key path
+#   ./claude --cpus 4                     # Allocate 4 CPUs
+#   ./claude --memory 4g                  # Set memory limit to 4GB
 #   ./claude "fix the bug"                # Execute prompt (auto-converted to -p)
 #   ./claude --debug "analyze logs"       # Combine flags and prompts
 #
@@ -33,6 +35,8 @@ CLAUDE_DIR="${HOME}/.claude-sandbox"        # Persistent config directory
 IMAGE="claude-code-sandbox:latest"          # Docker image name
 NAME_PREFIX="claude-sandbox-"               # Container name prefix
 SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
+CPUS="8"                                    # Default CPU allocation
+MEMORY="8g"                                 # Default memory limit
 
 # ============================================================================
 # Argument Parsing
@@ -51,6 +55,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --ssh-key=*)
             SSH_KEY="${1#*=}"
+            shift
+            ;;
+        --cpus)
+            CPUS="$2"
+            shift 2
+            ;;
+        --cpus=*)
+            CPUS="${1#*=}"
+            shift
+            ;;
+        --memory)
+            MEMORY="$2"
+            shift 2
+            ;;
+        --memory=*)
+            MEMORY="${1#*=}"
             shift
             ;;
         -p|--print)
@@ -203,6 +223,7 @@ trap cleanup EXIT INT TERM
 container run -it --rm --ssh \
     --cwd "$(pwd)" \
     --name "$NAME" \
+    --cpus "$CPUS" --memory "$MEMORY" \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \
