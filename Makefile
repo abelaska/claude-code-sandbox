@@ -17,10 +17,10 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 build: ## Build the container image
-	docker build -t $(FULL_IMAGE) .
+	docker buildx build -t $(FULL_IMAGE) --load .
 
 build-no-cache: ## Build the container image without cache
-	docker build --no-cache -t $(FULL_IMAGE) .
+	docker buildx build --no-cache -t $(FULL_IMAGE) --load .
 
 export: ## Export the container image to tar archive
 	@echo "Exporting $(FULL_IMAGE) to $(TAR_FILE)..."

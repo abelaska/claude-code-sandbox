@@ -35,8 +35,8 @@ CLAUDE_DIR="${HOME}/.claude-sandbox"        # Persistent config directory
 IMAGE="claude-code-sandbox:latest"          # Docker image name
 NAME_PREFIX="claude-sandbox-"               # Container name prefix
 SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
-CPUS="8"                                    # Default CPU allocation
-MEMORY="8g"                                 # Default memory limit
+CPUS="4"                                    # Default CPU allocation
+MEMORY="4g"                                 # Default memory limit
 
 # ============================================================================
 # Argument Parsing
@@ -120,10 +120,8 @@ if ! docker info >/dev/null 2>&1; then
     # Platform-specific startup
     case "$(uname -s)" in
         Darwin)
-            if command -v orbctl &>/dev/null; then
-                orbctl start 2>/dev/null || true
-            elif [ -d "/Applications/Docker.app" ]; then
-                open -a Docker
+            if command -v colima &>/dev/null; then
+                colima start --ssh-agent 2>/dev/null || true
             fi
             ;;
         Linux)
@@ -133,9 +131,10 @@ if ! docker info >/dev/null 2>&1; then
             ;;
     esac
 
-    # Wait for Docker to be ready (up to 30 seconds)
+    # Wait for Docker to be ready (up to 60 seconds for Colima)
     attempts=0
-    while ! docker info >/dev/null 2>&1 && [ $attempts -lt 30 ]; do
+    max_attempts=60
+    while ! docker info >/dev/null 2>&1 && [ $attempts -lt $max_attempts ]; do
         sleep 1
         ((attempts++))
     done
@@ -144,6 +143,7 @@ if ! docker info >/dev/null 2>&1; then
         echo "   ✓ Docker started successfully"
     else
         echo "   ✗ Failed to start Docker"
+        echo "   ℹ Try: colima start --ssh-agent"
         exit 1
     fi
 else
@@ -243,33 +243,14 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Build SSH forwarding arguments based on platform
+# Colima and Linux both use $SSH_AUTH_SOCK directly
 SSH_FORWARD_ARGS=()
-case "$(uname -s)" in
-    Darwin)
-        # macOS: Use Docker Desktop/OrbStack magic socket
-        # The socket is owned by the host user with a dynamic group ID
-        # We need to add that group to the container to access the socket
-        SSH_SOCKET="/run/host-services/ssh-auth.sock"
-        SSH_FORWARD_ARGS=(
-            -v "${SSH_SOCKET}:${SSH_SOCKET}"
-            -e "SSH_AUTH_SOCK=${SSH_SOCKET}"
-        )
-        # Get the socket's group ID dynamically (it varies per machine)
-        SOCKET_GID=$(docker run --rm -v "${SSH_SOCKET}:${SSH_SOCKET}" alpine:latest stat -c '%g' "${SSH_SOCKET}" 2>/dev/null || echo "")
-        if [ -n "$SOCKET_GID" ]; then
-            SSH_FORWARD_ARGS+=(--group-add "$SOCKET_GID")
-        fi
-        ;;
-    Linux)
-        # Linux: Forward the actual SSH_AUTH_SOCK
-        if [ -n "$SSH_AUTH_SOCK" ]; then
-            SSH_FORWARD_ARGS=(
-                -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK"
-                -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
-            )
-        fi
-        ;;
-esac
+if [ -n "$SSH_AUTH_SOCK" ]; then
+    SSH_FORWARD_ARGS=(
+        -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK"
+        -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+    )
+fi
 
 docker run -it --rm \
     -w "$(pwd)" \

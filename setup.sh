@@ -3,15 +3,85 @@
 # Claude Code Sandbox Setup Script
 # =================================
 # This script automates the complete setup process:
-#   1. Checks and starts Docker if needed
-#   2. Builds the container image using make build
-#   3. Installs the claude wrapper script to ~/.local/bin/claude-sandbox
-#   4. Adds the 'ccs' alias to your shell configuration
+#   1. Installs Colima, Docker CLI, docker-compose, and docker-buildx (macOS)
+#   2. Configures Docker CLI plugins via ~/.docker/config.json
+#   3. Starts Colima with configured resources
+#   4. Configures Colima to auto-start on login (via brew services)
+#   5. Builds the container image using make build
+#   6. Installs the claude wrapper script to ~/.local/bin/claude-sandbox
+#   7. Adds the 'ccs' alias to your shell configuration
 #
-# Usage: ./setup.sh
+# Usage: ./setup.sh [options]
+#   --cpu <num>      Number of CPUs for Colima VM (default: 4)
+#   --memory <num>   Memory in GB for Colima VM (default: 8)
+#   --disk <num>     Disk size in GB for Colima VM (default: 100)
+#
+# Examples:
+#   ./setup.sh                           # Use defaults (4 CPU, 8GB RAM, 100GB disk)
+#   ./setup.sh --cpu 8 --memory 16       # Custom CPU and memory
+#   ./setup.sh --disk 200                # Larger disk
 #
 
 set -e  # Exit on any error
+
+# ============================================================================
+# Default Configuration
+# ============================================================================
+
+COLIMA_CPU=4
+COLIMA_MEMORY=8
+COLIMA_DISK=100
+
+# ============================================================================
+# Argument Parsing
+# ============================================================================
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cpu)
+            COLIMA_CPU="$2"
+            shift 2
+            ;;
+        --cpu=*)
+            COLIMA_CPU="${1#*=}"
+            shift
+            ;;
+        --memory)
+            COLIMA_MEMORY="$2"
+            shift 2
+            ;;
+        --memory=*)
+            COLIMA_MEMORY="${1#*=}"
+            shift
+            ;;
+        --disk)
+            COLIMA_DISK="$2"
+            shift 2
+            ;;
+        --disk=*)
+            COLIMA_DISK="${1#*=}"
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: ./setup.sh [options]"
+            echo ""
+            echo "Options:"
+            echo "  --cpu <num>      Number of CPUs for Colima VM (default: 4)"
+            echo "  --memory <num>   Memory in GB for Colima VM (default: 8)"
+            echo "  --disk <num>     Disk size in GB for Colima VM (default: 100)"
+            echo ""
+            echo "Examples:"
+            echo "  ./setup.sh                           # Use defaults"
+            echo "  ./setup.sh --cpu 8 --memory 16       # Custom CPU and memory"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
 
 # ============================================================================
 # Color codes for pretty output
@@ -56,21 +126,128 @@ print_info() {
 
 print_header "Claude Code Sandbox Setup"
 
+print_info "Configuration: ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk"
+
 # ============================================================================
-# Step 1: Check Docker
+# Step 1: Install Dependencies (macOS only)
 # ============================================================================
 
-print_header "Step 1: Docker Check"
+print_header "Step 1: Installing Dependencies"
 
-# Check if docker command exists
-if ! command -v docker &> /dev/null; then
-    print_error "docker command not found"
-    print_info "Install Docker via OrbStack: brew install orbstack"
-    print_info "Or install Docker Desktop from: https://docker.com/products/docker-desktop"
-    exit 1
-fi
+case "$(uname -s)" in
+    Darwin)
+        # Check if Homebrew is installed
+        if ! command -v brew &> /dev/null; then
+            print_error "Homebrew not found"
+            print_info "Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            exit 1
+        fi
+        print_success "Homebrew found"
 
-print_success "docker command found"
+        # Install Colima if not present
+        if ! command -v colima &> /dev/null; then
+            print_info "Installing Colima..."
+            brew install colima
+            print_success "Colima installed"
+        else
+            print_success "Colima already installed"
+        fi
+
+        # Install Docker CLI if not present
+        if ! command -v docker &> /dev/null; then
+            print_info "Installing Docker CLI..."
+            brew install docker
+            print_success "Docker CLI installed"
+        else
+            print_success "Docker CLI already installed"
+        fi
+
+        # Install docker-compose if not present
+        if ! brew list docker-compose &> /dev/null; then
+            print_info "Installing docker-compose..."
+            brew install docker-compose
+            print_success "docker-compose installed"
+        else
+            print_success "docker-compose already installed"
+        fi
+
+        # Install docker-buildx if not present
+        if ! brew list docker-buildx &> /dev/null; then
+            print_info "Installing docker-buildx..."
+            brew install docker-buildx
+            print_success "docker-buildx installed"
+        else
+            print_success "docker-buildx already installed"
+        fi
+
+        # Configure Docker CLI plugins path in ~/.docker/config.json
+        print_info "Configuring Docker CLI plugins..."
+        DOCKER_CONFIG_DIR="$HOME/.docker"
+        DOCKER_CONFIG_FILE="$DOCKER_CONFIG_DIR/config.json"
+        BREW_PREFIX="$(brew --prefix)"
+
+        mkdir -p "$DOCKER_CONFIG_DIR"
+
+        # Build the cliPluginsExtraDirs array
+        COMPOSE_PATH="$BREW_PREFIX/opt/docker-compose/bin"
+        BUILDX_PATH="$BREW_PREFIX/opt/docker-buildx/bin"
+
+        if [ -f "$DOCKER_CONFIG_FILE" ]; then
+            # Update existing config.json using jq if available, otherwise use python
+            if command -v jq &> /dev/null; then
+                jq --arg compose "$COMPOSE_PATH" --arg buildx "$BUILDX_PATH" \
+                    '.cliPluginsExtraDirs = [$compose, $buildx]' \
+                    "$DOCKER_CONFIG_FILE" > "$DOCKER_CONFIG_FILE.tmp" && \
+                    mv "$DOCKER_CONFIG_FILE.tmp" "$DOCKER_CONFIG_FILE"
+            elif command -v python3 &> /dev/null; then
+                python3 -c "
+import json
+import sys
+config_file = '$DOCKER_CONFIG_FILE'
+compose_path = '$COMPOSE_PATH'
+buildx_path = '$BUILDX_PATH'
+try:
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+except:
+    config = {}
+config['cliPluginsExtraDirs'] = [compose_path, buildx_path]
+with open(config_file, 'w') as f:
+    json.dump(config, f, indent=2)
+"
+            else
+                print_warning "Neither jq nor python3 found, skipping config.json update"
+            fi
+        else
+            # Create new config.json
+            cat > "$DOCKER_CONFIG_FILE" << EOF
+{
+  "cliPluginsExtraDirs": [
+    "$COMPOSE_PATH",
+    "$BUILDX_PATH"
+  ]
+}
+EOF
+        fi
+        print_success "Docker CLI plugins configured"
+        ;;
+    Linux)
+        print_info "Linux detected - please ensure Docker is installed via your package manager"
+        if ! command -v docker &> /dev/null; then
+            print_error "Docker not found"
+            print_info "Ubuntu/Debian: sudo apt-get install docker.io"
+            print_info "Fedora: sudo dnf install docker"
+            exit 1
+        fi
+        print_success "Docker found"
+        ;;
+esac
+
+# ============================================================================
+# Step 2: Start Colima/Docker
+# ============================================================================
+
+print_header "Step 2: Docker Runtime Check"
 
 # Check if Docker daemon is running
 if ! docker info >/dev/null 2>&1; then
@@ -79,10 +256,14 @@ if ! docker info >/dev/null 2>&1; then
     # Platform-specific startup
     case "$(uname -s)" in
         Darwin)
-            if command -v orbctl &>/dev/null; then
-                orbctl start 2>/dev/null || true
-            elif [ -d "/Applications/Docker.app" ]; then
-                open -a Docker
+            # Start Colima with specified resources and SSH agent forwarding
+            if command -v colima &>/dev/null; then
+                print_info "Starting Colima with ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk..."
+                colima start --cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent
+                print_success "Colima started with configured resources"
+            else
+                print_error "Colima not found - please run setup again"
+                exit 1
             fi
             ;;
         Linux)
@@ -92,29 +273,73 @@ if ! docker info >/dev/null 2>&1; then
             ;;
     esac
 
-    # Wait for Docker to be ready (up to 30 seconds)
+    # Wait for Docker to be ready (up to 60 seconds for Colima)
     attempts=0
-    while ! docker info >/dev/null 2>&1 && [ $attempts -lt 30 ]; do
+    max_attempts=60
+    while ! docker info >/dev/null 2>&1 && [ $attempts -lt $max_attempts ]; do
         sleep 1
         ((attempts++))
     done
 
     if docker info >/dev/null 2>&1; then
-        print_success "Docker started"
+        print_success "Docker is now running"
     else
         print_error "Failed to start Docker"
-        print_info "Please start Docker manually and try again"
+        print_info "Please check Colima status: colima status"
         exit 1
     fi
 else
-    print_success "Docker is running"
+    print_success "Docker is already running"
+
+    # On macOS, verify Colima is the runtime
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v colima &>/dev/null; then
+        if colima status 2>&1 | grep -qi "running"; then
+            print_success "Colima runtime verified"
+        else
+            print_warning "Docker is running but Colima may not be the active runtime"
+            print_info "If you want to use Colima, stop other runtimes and run: colima start"
+        fi
+    fi
+fi
+
+# Configure Colima auto-start on login (macOS only)
+if [[ "$(uname -s)" == "Darwin" ]] && command -v colima &>/dev/null; then
+    print_info "Configuring Colima auto-start on login..."
+
+    COLIMA_PLIST="$HOME/Library/LaunchAgents/homebrew.mxcl.colima.plist"
+
+    # Check if LaunchAgent plist exists (this is what enables auto-start)
+    if [ -f "$COLIMA_PLIST" ]; then
+        print_success "Colima auto-start already configured"
+    elif colima status 2>&1 | grep -qi "running"; then
+        # Colima is running but plist doesn't exist - need to stop and restart via brew services
+        print_info "Colima is running manually, configuring auto-start..."
+        colima stop >/dev/null 2>&1
+        sleep 2
+        if brew services start colima >/dev/null 2>&1; then
+            print_success "Colima configured to start automatically on login"
+        else
+            # Fallback: restart Colima manually if brew services fails
+            colima start --cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent >/dev/null 2>&1
+            print_warning "Could not configure auto-start via brew services"
+            print_info "You can manually enable it with: brew services start colima"
+        fi
+    else
+        # Colima not running - start via brew services
+        if brew services start colima >/dev/null 2>&1; then
+            print_success "Colima configured to start automatically on login"
+        else
+            print_warning "Could not configure auto-start via brew services"
+            print_info "You can manually enable it with: brew services start colima"
+        fi
+    fi
 fi
 
 # ============================================================================
-# Step 2: Build Container Image
+# Step 3: Build Container Image
 # ============================================================================
 
-print_header "Step 2: Building Container Image"
+print_header "Step 3: Building Container Image"
 
 print_info "Running 'make build'..."
 
@@ -126,10 +351,10 @@ else
 fi
 
 # ============================================================================
-# Step 3: Install Claude Wrapper Script
+# Step 4: Install Claude Wrapper Script
 # ============================================================================
 
-print_header "Step 3: Installing Claude Wrapper"
+print_header "Step 4: Installing Claude Wrapper"
 
 INSTALL_DIR="$HOME/.local/bin"
 CLAUDE_SCRIPT="$(pwd)/claude"
@@ -150,10 +375,10 @@ chmod +x "$INSTALL_DIR/claude-sandbox"
 print_success "Claude wrapper installed"
 
 # ============================================================================
-# Step 4: Setup Shell Alias
+# Step 5: Setup Shell Alias
 # ============================================================================
 
-print_header "Step 4: Setting up Shell Alias"
+print_header "Step 5: Setting up Shell Alias"
 
 # Detect the user's shell
 CURRENT_SHELL=$(basename "$SHELL")

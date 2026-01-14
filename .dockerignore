@@ -1,0 +1,24 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+CLAUDE.md
+LICENSE
+
+# Local Claude settings
+.claude
+
+# Development files
+.editorconfig
+
+# Scripts (not needed in image)
+claude
+setup.sh
+Makefile
+
+# Archives
+*.tar
+*.tar.gz
+*.zip

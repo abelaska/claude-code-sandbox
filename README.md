@@ -1,6 +1,6 @@
 # Claude Code Sandbox
 
-A containerized environment for running Claude Code CLI with full MCP (Model Context Protocol) server support using Docker.
+A containerized environment for running Claude Code CLI with full MCP (Model Context Protocol) server support using Docker via Colima.
 
 ## Overview
 
@@ -37,26 +37,33 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
 
 ## Prerequisites
 
-- **Docker** - Via OrbStack (recommended for macOS), Docker Desktop, or Docker Engine
+- **Docker** - Via Colima (recommended for macOS) or Docker Engine (Linux)
 - **Claude Pro/Max subscription** OR **Anthropic API key**
 
 ### Supported Platforms
 
 - **macOS** (Apple Silicon or Intel)
 - **Linux** (x86_64 or ARM64)
-- **Windows** (via WSL2)
 
 ### Installing Docker
 
-**macOS (OrbStack - Recommended):**
+**macOS (Colima - Recommended):**
+
+The `setup.sh` script automatically installs all dependencies via Homebrew:
+
+- `colima` - Lightweight container runtime using Lima VM
+- `docker` - Docker CLI
+- `docker-compose` - Multi-container orchestration
+- `docker-buildx` - Extended build capabilities
+
+Plugins are configured via `~/.docker/config.json` (cliPluginsExtraDirs).
+
+Or install manually:
 
 ```bash
-brew install orbstack
+brew install colima docker docker-compose docker-buildx
+colima start --cpu 4 --memory 8 --disk 100 --ssh-agent
 ```
-
-**macOS (Docker Desktop):**
-
-Download from <https://docker.com/products/docker-desktop>
 
 **Linux (Ubuntu/Debian):**
 
@@ -81,15 +88,22 @@ sudo usermod -aG docker $USER
 Run the setup script to install everything:
 
 ```bash
+# Use defaults (4 CPUs, 8GB RAM, 100GB disk)
 ./setup.sh
+
+# Or customize Colima VM resources
+./setup.sh --cpu 8 --memory 16 --disk 200
 ```
 
 This will:
 
-1. Check and start Docker if needed
-2. Build the container image
-3. Install the `claude-sandbox` wrapper to `~/.local/bin`
-4. Add the `ccs` alias to your shell config
+1. Install Colima, Docker CLI, docker-compose, and docker-buildx via Homebrew (macOS)
+2. Configure Docker CLI plugins via `~/.docker/config.json`
+3. Start Colima with configured resources
+4. Configure Colima to auto-start on login
+5. Build the container image
+6. Install the `claude-sandbox` wrapper to `~/.local/bin`
+7. Add the `ccs` alias to your shell config
 
 After setup, reload your shell:
 
@@ -157,11 +171,13 @@ make build
 ```text
 .
 ├── Dockerfile           # Alpine-based image with MCP servers
-├── Makefile            # Build and management commands
-├── setup.sh            # Automated installation script
-├── claude              # Wrapper script for container launch
-├── .claude/            # Local settings
+├── Makefile             # Build and management commands
+├── setup.sh             # Automated installation script
+├── claude               # Wrapper script for container launch
+├── .dockerignore        # Files excluded from Docker build context
+├── .claude/             # Local settings
 │   └── settings.local.json
+├── CLAUDE.md            # Instructions for Claude Code AI
 └── README.md
 ```
 
@@ -171,11 +187,11 @@ make build
 
 The `claude` wrapper script (`./claude`) handles:
 
-1. **Docker verification** - Ensures Docker is running and starts it if needed (OrbStack, Docker Desktop, or systemctl)
+1. **Docker verification** - Ensures Docker is running and starts Colima if needed (macOS) or systemctl (Linux)
 2. **Container naming** - Generates unique incremental names (claude-sandbox-0, claude-sandbox-1, etc.)
 3. **Git config sync** - Copies your `.gitconfig` to the sandbox directory
 4. **SSH key loading** - Runs `ssh-add` to make your keys available for git operations
-5. **SSH agent forwarding** - Platform-aware forwarding (macOS uses Docker socket, Linux uses direct forwarding)
+5. **SSH agent forwarding** - Uses `$SSH_AUTH_SOCK` (works with Colima and native Linux)
 6. **Container launch** - Mounts workspace and config with proper isolation
 
 ### Volume Mounts
@@ -215,23 +231,23 @@ Located at `/mcp.json` inside the container:
 
 ## Makefile Commands
 
-| Command               | Description                        |
-|-----------------------|------------------------------------|
-| `make build`          | Build the container image          |
-| `make build-no-cache` | Build without cache                |
-| `make export`         | Export image to tar archive        |
-| `make import`         | Import image from tar archive      |
-| `make clean`          | Remove image and archives          |
-| `make info`           | Show image information             |
-| `make test`           | Test container with --version      |
-| `make help`           | Display all available commands     |
+| Command               | Description                    |
+| --------------------- | ------------------------------ |
+| `make build`          | Build the container image      |
+| `make build-no-cache` | Build without cache            |
+| `make export`         | Export image to tar archive    |
+| `make import`         | Import image from tar archive  |
+| `make clean`          | Remove image and archives      |
+| `make info`           | Show image information         |
+| `make test`           | Test container with --version  |
+| `make help`           | Display all available commands |
 
 ## Environment Variables
 
 The container sets these environment variables:
 
 | Variable                            | Value  | Purpose                          |
-|-------------------------------------|--------|----------------------------------|
+| ----------------------------------- | ------ | -------------------------------- |
 | `CLAUDE_CODE_SKIP_PERMISSIONS`      | `true` | Bypass permission prompts        |
 | `DISABLE_AUTOUPDATER`               | `1`    | Prevent auto-updates             |
 | `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL` | `0`    | Allow IDE auto-install           |
@@ -300,9 +316,12 @@ Control CPU and memory allocation for the container:
 ./claude --cpus=4 --memory=4g
 ```
 
-**Default values:**
-- CPUs: 8
-- Memory: 8g
+**Default container limits:**
+
+- CPUs: 4
+- Memory: 4G
+
+**Note:** These are per-container limits. The Colima VM itself has separate defaults (4 CPUs, 8GB RAM, 100GB disk) configured during setup.
 
 **Tip:** Lower resource limits are useful when running multiple containers simultaneously or on systems with limited resources.
 
@@ -317,8 +336,19 @@ The wrapper script supports running multiple Claude Code containers simultaneous
 ### Container Management
 
 ```bash
-# Check Docker status
+# Check Docker/Colima status
 docker info
+colima status          # macOS only
+
+# Colima VM management (macOS)
+colima start --ssh-agent     # Start Colima
+colima stop                   # Stop Colima
+colima delete                 # Delete VM (warning: loses all data)
+
+# Colima auto-start management (macOS)
+brew services list           # Check if Colima is set to auto-start
+brew services start colima   # Enable auto-start on login
+brew services stop colima    # Disable auto-start (keeps Colima running)
 
 # List running containers
 docker ps
@@ -353,11 +383,8 @@ Error: Cannot connect to the Docker daemon
 **Solution:**
 
 ```bash
-# macOS with OrbStack
-orbctl start
-
-# macOS with Docker Desktop
-open -a Docker
+# macOS with Colima
+colima start --ssh-agent
 
 # Linux
 sudo systemctl start docker
@@ -478,16 +505,14 @@ Edit the `claude` script to:
 
 This project supports multiple Docker providers:
 
-| Provider        | Platform       | Notes                                          |
-|-----------------|----------------|------------------------------------------------|
-| OrbStack        | macOS          | Recommended - lightweight, fast, low CPU usage |
-| Docker Desktop  | macOS, Windows | Full-featured, includes Kubernetes             |
-| Docker Engine   | Linux          | Native Docker daemon                           |
+| Provider      | Platform | Notes                                                |
+| ------------- | -------- | ---------------------------------------------------- |
+| Colima        | macOS    | Recommended - lightweight, open-source, uses Lima VM |
+| Docker Engine | Linux    | Native Docker daemon                                 |
 
 ## Resources
 
-- [OrbStack](https://orbstack.dev) - Recommended Docker provider for macOS
-- [Docker Desktop](https://docker.com/products/docker-desktop) - Cross-platform Docker provider
+- [Colima](https://github.com/abiosoft/colima) - Recommended Docker provider for macOS
 - [Claude Code Documentation](https://github.com/anthropics/claude-code)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io)
 
