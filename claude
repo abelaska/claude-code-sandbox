@@ -120,7 +120,9 @@ if ! docker info >/dev/null 2>&1; then
     # Platform-specific startup
     case "$(uname -s)" in
         Darwin)
-            if command -v colima &>/dev/null; then
+            if command -v brew &>/dev/null && brew services list | grep -q "^colima"; then
+                brew services start colima 2>/dev/null || true
+            elif command -v colima &>/dev/null; then
                 colima start --ssh-agent 2>/dev/null || true
             fi
             ;;
@@ -143,7 +145,7 @@ if ! docker info >/dev/null 2>&1; then
         echo "   ✓ Docker started successfully"
     else
         echo "   ✗ Failed to start Docker"
-        echo "   ℹ Try: colima start --ssh-agent"
+        echo "   ℹ Try: brew services start colima"
         exit 1
     fi
 else
@@ -243,14 +245,36 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Build SSH forwarding arguments based on platform
-# Colima and Linux both use $SSH_AUTH_SOCK directly
+# macOS with Colima: Use the Colima VM's forwarded socket at /run/host-services/ssh-auth.sock
+# Linux: Use $SSH_AUTH_SOCK directly
 SSH_FORWARD_ARGS=()
-if [ -n "$SSH_AUTH_SOCK" ]; then
-    SSH_FORWARD_ARGS=(
-        -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK"
-        -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
-    )
-fi
+CONTAINER_SSH_SOCK=""
+
+case "$(uname -s)" in
+    Darwin)
+        # Colima provides SSH agent at a fixed path inside the VM
+        COLIMA_SSH_SOCK="/run/host-services/ssh-auth.sock"
+        if colima ssh -- test -S "$COLIMA_SSH_SOCK" 2>/dev/null; then
+            CONTAINER_SSH_SOCK="/tmp/ssh-agent.sock"
+            SSH_FORWARD_ARGS=(
+                -v "$COLIMA_SSH_SOCK:$CONTAINER_SSH_SOCK"
+                -e "SSH_AUTH_SOCK=$CONTAINER_SSH_SOCK"
+            )
+        else
+            echo "   ⚠ SSH agent not available in Colima VM"
+            echo "   ℹ Restart Colima with: colima stop && colima start --ssh-agent"
+        fi
+        ;;
+    Linux)
+        # Linux uses the host SSH socket directly
+        if [ -n "$SSH_AUTH_SOCK" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+            SSH_FORWARD_ARGS=(
+                -v "$SSH_AUTH_SOCK:$SSH_AUTH_SOCK"
+                -e "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+            )
+        fi
+        ;;
+esac
 
 docker run -it --rm \
     -w "$(pwd)" \

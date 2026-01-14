@@ -27,7 +27,7 @@ Claude Code Sandbox is a containerized environment for running Claude Code CLI u
    - Mounts workspace and configuration directories
    - Supports `--ssh-key` flag to specify which SSH key to load
    - Automatically handles prompt arguments (positional args become prompts with `-p` flag)
-   - SSH agent forwarding via `$SSH_AUTH_SOCK` (works with Colima and native Linux)
+   - SSH agent forwarding via Colima's VM socket (macOS) or `$SSH_AUTH_SOCK` (Linux)
 
 3. **setup.sh** - Automated installation script that:
 
@@ -204,7 +204,9 @@ The wrapper script supports flexible SSH key loading:
 - Override: Use `--ssh-key <name>` or `--ssh-key <path>` flag
 - Before running: Ensure keys are available with `ssh-add -l`
 - The script calls `ssh-add` to load keys into the agent
-- SSH agent is forwarded into container via `$SSH_AUTH_SOCK` volume mount
+- SSH agent forwarding differs by platform:
+  - **macOS**: Uses Colima's VM socket at `/run/host-services/ssh-auth.sock`
+  - **Linux**: Uses `$SSH_AUTH_SOCK` directly
 - Colima must be started with `--ssh-agent` flag for SSH forwarding to work
 
 ### Multiple Container Instances
