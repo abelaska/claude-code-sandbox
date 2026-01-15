@@ -81,6 +81,9 @@ tini -- claude --dangerously-skip-permissions --allow-dangerously-skip-permissio
 # With custom Colima resources
 ./setup.sh --cpu 8 --memory 16 --disk 200
 
+# Use QEMU instead of Virtualization.framework
+./setup.sh --vm-type qemu
+
 # Manual setup steps (requires Colima/Docker running)
 colima start --cpu 4 --memory 8 --disk 100 --ssh-agent
 make build                    # Build container image
@@ -234,11 +237,42 @@ There are two levels of resource configuration:
    - Default: 4 CPUs, 8GB RAM, 100GB disk
    - These define the VM that runs Docker
    - Configure with `./setup.sh --cpu 8 --memory 16 --disk 200`
+   - VM type can be set with `--vm-type` (see below)
 
 2. **Container resource limits** (configured in `claude` wrapper):
    - Default: 4 CPUs, 4GB memory
    - These limit resources per container instance
    - Configure with `./claude --cpus 4 --memory 4g`
+
+### Colima VM Types (macOS)
+
+Colima supports two virtualization backends:
+
+- **vz** (default): Apple's Virtualization.framework
+  - Faster performance and better macOS integration
+  - Native ARM64 support on Apple Silicon
+  - Recommended for most use cases
+
+- **qemu**: QEMU emulation
+  - Better compatibility with certain workloads
+  - Supports x86_64 emulation on Apple Silicon (via Rosetta)
+  - Useful when experiencing issues with vz backend
+  - Required for some container images that don't support ARM64
+
+To use QEMU during initial setup:
+
+```bash
+./setup.sh --vm-type qemu
+```
+
+To switch VM types on an existing installation:
+
+```bash
+# Must delete and recreate the VM (warning: loses container images)
+colima delete
+colima start --vm-type qemu --cpu 4 --memory 8 --disk 100 --ssh-agent
+make build  # Rebuild the container image
+```
 
 ### Platform Requirements
 

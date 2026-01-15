@@ -15,11 +15,13 @@
 #   --cpu <num>      Number of CPUs for Colima VM (default: 4)
 #   --memory <num>   Memory in GB for Colima VM (default: 8)
 #   --disk <num>     Disk size in GB for Colima VM (default: 100)
+#   --vm-type <type> VM type: vz (default) or qemu
 #
 # Examples:
 #   ./setup.sh                           # Use defaults (4 CPU, 8GB RAM, 100GB disk)
 #   ./setup.sh --cpu 8 --memory 16       # Custom CPU and memory
 #   ./setup.sh --disk 200                # Larger disk
+#   ./setup.sh --vm-type qemu            # Use QEMU instead of Virtualization.framework
 #
 
 set -e  # Exit on any error
@@ -31,6 +33,7 @@ set -e  # Exit on any error
 COLIMA_CPU=4
 COLIMA_MEMORY=8
 COLIMA_DISK=100
+COLIMA_VM_TYPE=""  # Empty means use Colima's default (vz)
 
 # ============================================================================
 # Argument Parsing
@@ -62,6 +65,14 @@ while [[ $# -gt 0 ]]; do
             COLIMA_DISK="${1#*=}"
             shift
             ;;
+        --vm-type)
+            COLIMA_VM_TYPE="$2"
+            shift 2
+            ;;
+        --vm-type=*)
+            COLIMA_VM_TYPE="${1#*=}"
+            shift
+            ;;
         -h|--help)
             echo "Usage: ./setup.sh [options]"
             echo ""
@@ -69,10 +80,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --cpu <num>      Number of CPUs for Colima VM (default: 4)"
             echo "  --memory <num>   Memory in GB for Colima VM (default: 8)"
             echo "  --disk <num>     Disk size in GB for Colima VM (default: 100)"
+            echo "  --vm-type <type> VM type: vz (default) or qemu"
             echo ""
             echo "Examples:"
             echo "  ./setup.sh                           # Use defaults"
             echo "  ./setup.sh --cpu 8 --memory 16       # Custom CPU and memory"
+            echo "  ./setup.sh --vm-type qemu            # Use QEMU backend"
             exit 0
             ;;
         *)
@@ -126,7 +139,11 @@ print_info() {
 
 print_header "Claude Code Sandbox Setup"
 
-print_info "Configuration: ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk"
+if [ -n "$COLIMA_VM_TYPE" ]; then
+    print_info "Configuration: ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk, VM type: ${COLIMA_VM_TYPE}"
+else
+    print_info "Configuration: ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk"
+fi
 
 # ============================================================================
 # Step 1: Install Dependencies (macOS only)
@@ -259,7 +276,11 @@ if ! docker info >/dev/null 2>&1; then
             # Start Colima with specified resources and SSH agent forwarding
             if command -v colima &>/dev/null; then
                 print_info "Starting Colima with ${COLIMA_CPU} CPUs, ${COLIMA_MEMORY}GB memory, ${COLIMA_DISK}GB disk..."
-                colima start --cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent
+                COLIMA_START_ARGS=(--cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent)
+                if [ -n "$COLIMA_VM_TYPE" ]; then
+                    COLIMA_START_ARGS+=(--vm-type "$COLIMA_VM_TYPE")
+                fi
+                colima start "${COLIMA_START_ARGS[@]}"
                 print_success "Colima started with configured resources"
             else
                 print_error "Colima not found - please run setup again"
@@ -320,7 +341,11 @@ if [[ "$(uname -s)" == "Darwin" ]] && command -v colima &>/dev/null; then
             print_success "Colima configured to start automatically on login"
         else
             # Fallback: restart Colima manually if brew services fails
-            colima start --cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent >/dev/null 2>&1
+            COLIMA_START_ARGS=(--cpu "$COLIMA_CPU" --memory "$COLIMA_MEMORY" --disk "$COLIMA_DISK" --ssh-agent)
+            if [ -n "$COLIMA_VM_TYPE" ]; then
+                COLIMA_START_ARGS+=(--vm-type "$COLIMA_VM_TYPE")
+            fi
+            colima start "${COLIMA_START_ARGS[@]}" >/dev/null 2>&1
             print_warning "Could not configure auto-start via brew services"
             print_info "You can manually enable it with: brew services start colima"
         fi
