@@ -26,6 +26,8 @@ Claude Code Sandbox is a containerized environment for running Claude Code CLI u
    - Loads SSH keys via `ssh-add` for git operations
    - Mounts workspace and configuration directories
    - Supports `--ssh-key` flag to specify which SSH key to load
+   - Supports `--max-thinking-tokens` flag to set MAX_THINKING_TOKENS environment variable (max: 63999)
+   - Supports `--help` flag to display usage information
    - Automatically handles prompt arguments (positional args become prompts with `-p` flag)
    - SSH agent forwarding via Colima's VM socket (macOS) or `$SSH_AUTH_SOCK` (Linux)
 
@@ -60,6 +62,10 @@ Set in the Dockerfile:
 - `DISABLE_AUTOUPDATER="1"` - Prevents auto-updates
 - `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL="0"` - Allows IDE integration
 - `CLAUDECODE="1"` - Indicates running in Claude Code environment
+
+Optionally set via wrapper script flags:
+
+- `MAX_THINKING_TOKENS` - Controls thinking token limit for Claude (max: 63999, set via `--max-thinking-tokens`)
 
 ### Container Entrypoint
 
@@ -102,6 +108,10 @@ make info               # Show image information
 ### Running Claude Code
 
 ```bash
+# Show help
+./claude --help
+./claude -h
+
 # Interactive session
 ./claude
 ccs                     # If setup.sh was run
@@ -116,6 +126,10 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 ./claude --memory 4g             # Set memory limit to 4GB
 ./claude --cpus 2 --memory 2g    # Combine both settings
 
+# Configure Claude thinking tokens (max: 63999)
+./claude --max-thinking-tokens 10000
+./claude --max-thinking-tokens 63999
+
 # Pass prompts directly (automatically converted to -p flag)
 ./claude "fix the bug"
 ./claude "analyze the performance bottleneck"
@@ -127,6 +141,7 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 # Combine flags and prompts
 ./claude --debug "show error logs"
 ./claude --cpus 4 --memory 4g "optimize this code"
+./claude --max-thinking-tokens 20000 --debug "analyze complex logic"
 ```
 
 ### Container Management

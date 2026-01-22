@@ -13,6 +13,7 @@
 #   ./claude --ssh-key ~/.ssh/custom_key  # Use custom key path
 #   ./claude --cpus 4                     # Allocate 4 CPUs
 #   ./claude --memory 4g                  # Set memory limit to 4GB
+#   ./claude --max-thinking-tokens 10000  # Set MAX_THINKING_TOKENS env var
 #   ./claude "fix the bug"                # Execute prompt (auto-converted to -p)
 #   ./claude --debug "analyze logs"       # Combine flags and prompts
 #
@@ -37,6 +38,7 @@ NAME_PREFIX="claude-sandbox-"               # Container name prefix
 SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
 CPUS="4"                                    # Default CPU allocation
 MEMORY="4g"                                 # Default memory limit
+MAX_THINKING_TOKENS=""                      # Optional: MAX_THINKING_TOKENS env var
 
 # ============================================================================
 # Argument Parsing
@@ -49,6 +51,58 @@ CLAUDE_ARGS=()
 PROMPT_ARG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help)
+            cat <<'HELP'
+Claude Code Sandbox Container Wrapper
+======================================
+
+Usage: ./claude [OPTIONS] [PROMPT]
+
+Options:
+  -h, --help                    Show this help message and exit
+
+  Container Resources:
+  --cpus N                      Allocate N CPUs to the container (default: 4)
+  --memory SIZE                 Set memory limit (e.g., 4g, 512m) (default: 4g)
+
+  SSH Configuration:
+  --ssh-key KEY                 Use specific SSH key (name or path)
+                                Examples: --ssh-key id_ed25519
+                                          --ssh-key ~/.ssh/custom_key
+                                Environment: CLAUDE_SSH_KEY
+
+  Claude Configuration:
+  --max-thinking-tokens N       Set MAX_THINKING_TOKENS environment variable
+                                Maximum value: 63999
+                                Controls the thinking token limit for Claude
+
+  Claude CLI Flags:
+  Any other flags (e.g., --debug, -p) are passed directly to Claude CLI
+
+Examples:
+  ./claude                                    # Start interactive session
+  ./claude --help                             # Show this help
+  ./claude --debug                            # Debug mode
+  ./claude --cpus 8 --memory 8g              # Use more resources
+  ./claude --max-thinking-tokens 10000        # Set thinking token limit
+  ./claude --ssh-key id_rsa                   # Use specific SSH key
+  ./claude "fix the bug"                      # Execute prompt (auto -p flag)
+  ./claude --debug "analyze logs"             # Combine flags and prompts
+
+Environment Variables:
+  CLAUDE_SSH_KEY               Default SSH key to use (default: id_ed25519)
+
+Notes:
+  - The container automatically mounts your current directory as workspace
+  - Git configuration is synced from ~/.gitconfig
+  - SSH agent is forwarded for git operations
+  - Each run creates a uniquely named container (claude-sandbox-N)
+  - Containers are automatically removed on exit (--rm flag)
+
+For more information, see the project README or CLAUDE.md
+HELP
+            exit 0
+            ;;
         --ssh-key)
             SSH_KEY="$2"
             shift 2
@@ -71,6 +125,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --memory=*)
             MEMORY="${1#*=}"
+            shift
+            ;;
+        --max-thinking-tokens)
+            MAX_THINKING_TOKENS="$2"
+            shift 2
+            ;;
+        --max-thinking-tokens=*)
+            MAX_THINKING_TOKENS="${1#*=}"
             shift
             ;;
         -p|--print)
@@ -276,11 +338,18 @@ case "$(uname -s)" in
         ;;
 esac
 
+# Build environment variable arguments
+ENV_ARGS=()
+if [ -n "$MAX_THINKING_TOKENS" ]; then
+    ENV_ARGS+=(-e "MAX_THINKING_TOKENS=$MAX_THINKING_TOKENS")
+fi
+
 docker run -it --rm \
     -w "$(pwd)" \
     --name "$NAME" \
     --cpus "$CPUS" --memory "$MEMORY" \
     "${SSH_FORWARD_ARGS[@]}" \
+    "${ENV_ARGS[@]}" \
     -v "$CLAUDE_DIR:/home/claude" \
     -v "$HOME/.claude/ide:/home/claude/.claude/ide:ro" \
     -v "$(pwd):$(pwd)" \
