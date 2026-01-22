@@ -84,7 +84,8 @@ RUN pip3 install --no-cache-dir --break-system-packages mcp-server-fetch
 # The official Claude Code command-line interface from Anthropic
 # Installed globally via npm for system-wide access
 # ============================================================================
-RUN npm install -g @anthropic-ai/claude-code
+RUN curl -fsSL https://claude.ai/install.sh | bash
+RUN cp ~/.local/bin/claude /usr/local/bin && rm -rf ~/.local
 
 # Install MCP server packages globally via npm
 RUN npm install -g \
@@ -146,7 +147,7 @@ WORKDIR /workspace
 # CLAUDECODE: Flag indicating running in Claude Code environment
 # ============================================================================
 ENV HOME="/home/claude"
-ENV PATH="$BUN_INSTALL/bin:/bin:/usr/bin:/usr/local/bin:/usr/local/sbin:/home/claude/.npm-global/bin:$PATH"
+ENV PATH="$BUN_INSTALL/bin:/bin:/usr/bin:/usr/local/bin:/usr/local/sbin:/home/claude/.npm-global/bin:/home/claude/.local/bin:$PATH"
 ENV CLAUDE_CODE_SKIP_PERMISSIONS="true"
 ENV DISABLE_AUTOUPDATER="1"
 ENV CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL="0"
@@ -171,4 +172,4 @@ VOLUME ["/home/claude"]
 #   --ide: Enable IDE integration features
 #   --mcp-config: Specify MCP server configuration file path
 # ============================================================================
-ENTRYPOINT [ "/sbin/tini", "--", "claude", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--ide", "--mcp-config", "/mcp.json" ]
+ENTRYPOINT [ "/sbin/tini", "--", "/usr/local/bin/claude", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--ide", "--mcp-config", "/mcp.json" ]
