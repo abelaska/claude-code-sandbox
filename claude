@@ -359,6 +359,7 @@ docker run -it --rm \
     -w "$(pwd)" \
     --name "$NAME" \
     --cpus "$CPUS" --memory "$MEMORY" \
+    --network=host \
     "${SSH_FORWARD_ARGS[@]}" \
     "${ENV_ARGS[@]}" \
     -v "$CLAUDE_DIR:/home/claude" \
