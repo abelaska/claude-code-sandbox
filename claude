@@ -40,6 +40,7 @@ SSH_KEY="${CLAUDE_SSH_KEY:-id_ed25519}"     # SSH key to load (from env or flag)
 CPUS="4"                                    # Default CPU allocation
 MEMORY="4g"                                 # Default memory limit
 MAX_THINKING_TOKENS=""                      # Optional: MAX_THINKING_TOKENS env var
+MAX_MCP_OUTPUT_TOKENS="50000"               # Optional: MAX_MCP_OUTPUT_TOKENS env var
 
 # ============================================================================
 # Argument Parsing
@@ -349,6 +350,9 @@ esac
 ENV_ARGS=()
 if [ -n "$MAX_THINKING_TOKENS" ]; then
     ENV_ARGS+=(-e "MAX_THINKING_TOKENS=$MAX_THINKING_TOKENS")
+fi
+if [ -n "$MAX_MCP_OUTPUT_TOKENS" ]; then
+    ENV_ARGS+=(-e "MAX_MCP_OUTPUT_TOKENS=$MAX_MCP_OUTPUT_TOKENS")
 fi
 
 docker run -it --rm \

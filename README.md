@@ -8,7 +8,7 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
 
 - **Alpine Linux base** - Lightweight and secure
 - **Bun runtime** - Fast JavaScript/TypeScript execution
-- **MCP servers** - Filesystem, memory, and fetch capabilities
+- **MCP servers** - Filesystem, memory, fetch, and postgres capabilities
 - **SSH agent forwarding** - Git operations with your keys
 - **Smart wrapper script** - Seamless container management
 
@@ -17,9 +17,10 @@ Claude Code Sandbox provides an isolated, reproducible environment for running C
 ### Core Components
 
 - **Containerized Claude Code CLI** with bypassed permission prompts (`--dangerously-skip-permissions`)
-- **Three MCP servers pre-configured**:
+- **Four MCP servers pre-configured**:
   - `filesystem` - File operations within workspace
   - `memory` - Persistent memory/knowledge graph
+  - `postgres` - PostgreSQL database operations
   - `fetch` - HTTP requests to external APIs
 - **Git integration** - Syncs your host `.gitconfig` and forwards SSH keys
 - **Persistent storage** - Configuration saved to `~/.claude-sandbox`
@@ -221,6 +222,10 @@ Located at `/mcp.json` inside the container:
       "command": "/usr/local/bin/bunx",
       "args": ["@modelcontextprotocol/server-memory"]
     },
+    "postgres": {
+      "command": "/usr/local/bin/bunx",
+      "args": ["@modelcontextprotocol/server-postgres"]
+    },
     "fetch": {
       "command": "/usr/bin/python3",
       "args": ["-m", "mcp_server_fetch"]
@@ -246,12 +251,13 @@ Located at `/mcp.json` inside the container:
 
 The container sets these environment variables:
 
-| Variable                            | Value  | Purpose                          |
-| ----------------------------------- | ------ | -------------------------------- |
-| `CLAUDE_CODE_SKIP_PERMISSIONS`      | `true` | Bypass permission prompts        |
-| `DISABLE_AUTOUPDATER`               | `1`    | Prevent auto-updates             |
-| `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL` | `0`    | Allow IDE auto-install           |
-| `CLAUDECODE`                        | `1`    | Indicate Claude Code environment |
+| Variable                            | Value   | Purpose                          |
+| ----------------------------------- | ------- | -------------------------------- |
+| `CLAUDE_CODE_SKIP_PERMISSIONS`      | `true`  | Bypass permission prompts        |
+| `DISABLE_AUTOUPDATER`               | `1`     | Prevent auto-updates             |
+| `CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL` | `0`     | Allow IDE auto-install           |
+| `CLAUDECODE`                        | `1`     | Indicate Claude Code environment |
+| `MAX_MCP_OUTPUT_TOKENS`             | `50000` | MCP server output token limit    |
 
 ## Security Considerations
 
