@@ -26,6 +26,7 @@ Claude Code Sandbox is a containerized environment for running Claude Code CLI u
    - Loads SSH keys via `ssh-add` for git operations
    - Mounts workspace and configuration directories
    - Supports `--ssh-key` flag to specify which SSH key to load
+   - Supports `--max-thinking` flag to set MAX_THINKING_TOKENS to maximum (63999)
    - Supports `--max-thinking-tokens` flag to set MAX_THINKING_TOKENS environment variable (max: 63999)
    - Supports `--help` flag to display usage information
    - Automatically handles prompt arguments (positional args become prompts with `-p` flag)
@@ -65,7 +66,7 @@ Set in the Dockerfile:
 
 Optionally set via wrapper script flags:
 
-- `MAX_THINKING_TOKENS` - Controls thinking token limit for Claude (max: 63999, set via `--max-thinking-tokens`)
+- `MAX_THINKING_TOKENS` - Controls thinking token limit for Claude (max: 63999, set via `--max-thinking` or `--max-thinking-tokens`)
 
 ### Container Entrypoint
 
@@ -127,8 +128,8 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 ./claude --cpus 2 --memory 2g    # Combine both settings
 
 # Configure Claude thinking tokens (max: 63999)
+./claude --max-thinking               # Set to maximum (63999)
 ./claude --max-thinking-tokens 10000
-./claude --max-thinking-tokens 63999
 
 # Pass prompts directly (automatically converted to -p flag)
 ./claude "fix the bug"
@@ -141,7 +142,7 @@ export CLAUDE_SSH_KEY=id_ed25519; ./claude
 # Combine flags and prompts
 ./claude --debug "show error logs"
 ./claude --cpus 4 --memory 4g "optimize this code"
-./claude --max-thinking-tokens 20000 --debug "analyze complex logic"
+./claude --max-thinking --debug "analyze complex logic"
 ```
 
 ### Container Management

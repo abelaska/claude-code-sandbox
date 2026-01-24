@@ -14,6 +14,7 @@
 #   ./claude --cpus 4                     # Allocate 4 CPUs
 #   ./claude --memory 4g                  # Set memory limit to 4GB
 #   ./claude --max-thinking-tokens 10000  # Set MAX_THINKING_TOKENS env var
+#   ./claude --max-thinking                # Set MAX_THINKING_TOKENS to 63999
 #   ./claude "fix the bug"                # Execute prompt (auto-converted to -p)
 #   ./claude --debug "analyze logs"       # Combine flags and prompts
 #
@@ -72,6 +73,7 @@ Options:
                                 Environment: CLAUDE_SSH_KEY
 
   Claude Configuration:
+  --max-thinking                Set MAX_THINKING_TOKENS to maximum (63999)
   --max-thinking-tokens N       Set MAX_THINKING_TOKENS environment variable
                                 Maximum value: 63999
                                 Controls the thinking token limit for Claude
@@ -84,6 +86,7 @@ Examples:
   ./claude --help                             # Show this help
   ./claude --debug                            # Debug mode
   ./claude --cpus 8 --memory 8g              # Use more resources
+  ./claude --max-thinking                      # Max thinking tokens (63999)
   ./claude --max-thinking-tokens 10000        # Set thinking token limit
   ./claude --ssh-key id_rsa                   # Use specific SSH key
   ./claude "fix the bug"                      # Execute prompt (auto -p flag)
@@ -125,6 +128,10 @@ HELP
             ;;
         --memory=*)
             MEMORY="${1#*=}"
+            shift
+            ;;
+        --max-thinking)
+            MAX_THINKING_TOKENS="63999"
             shift
             ;;
         --max-thinking-tokens)
