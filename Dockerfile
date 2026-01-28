@@ -90,8 +90,7 @@ RUN cp ~/.local/bin/claude /usr/local/bin && rm -rf ~/.local
 # Install MCP server packages globally via npm
 RUN npm install -g \
     @modelcontextprotocol/server-filesystem \
-    @modelcontextprotocol/server-memory \
-    @modelcontextprotocol/server-postgres
+    @modelcontextprotocol/server-memory
 
 # ============================================================================
 # MCP Server Configuration
@@ -117,10 +116,6 @@ RUN cat <<'EOF' > /mcp.json
     "memory": {
       "command": "/usr/local/bin/bunx",
       "args": ["@modelcontextprotocol/server-memory"]
-    },
-    "postgres": {
-      "command": "/usr/local/bin/bunx",
-      "args": ["@modelcontextprotocol/server-postgres"]
     },
     "fetch": {
       "command": "/usr/bin/python3",
