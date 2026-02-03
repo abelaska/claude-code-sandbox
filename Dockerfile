@@ -30,6 +30,7 @@ LABEL description="Claude Code CLI with MCP server support"
 # ============================================================================
 RUN apk add --no-cache \
     build-base \
+    openssl \
     sqlite sqlite-dev \
     postgresql18-dev postgresql18-client \
     bash \
@@ -68,6 +69,13 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN curl -fsSL https://bun.sh/install | bash
 
 # ============================================================================
+# Install Rust Runtime
+# ============================================================================
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    $HOME/.cargo/bin/rustup component add rust-analyzer
+RUN cp $HOME/.cargo/bin/* /usr/local/bin/ && rm -rf $HOME/.cargo
+
+# ============================================================================
 # Install MCP Servers
 # ============================================================================
 # Install Model Context Protocol servers that extend Claude's capabilities:
@@ -85,7 +93,7 @@ RUN pip3 install --no-cache-dir --break-system-packages mcp-server-fetch
 # Installed globally via npm for system-wide access
 # ============================================================================
 RUN curl -fsSL https://claude.ai/install.sh | bash
-RUN cp ~/.local/bin/claude /usr/local/bin && rm -rf ~/.local
+RUN cp $HOME/.local/bin/claude /usr/local/bin && rm -rf $HOME/.local
 
 # Install MCP server packages globally via npm
 RUN npm install -g \
@@ -129,6 +137,10 @@ EOF
 # Runtime Configuration
 # ============================================================================
 
+# Copy entrypoint script (must happen before USER claude)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Switch to non-root user for security
 USER claude
 
@@ -164,12 +176,8 @@ VOLUME ["/home/claude"]
 # ============================================================================
 # Container Entrypoint
 # ============================================================================
-# Launch Claude Code CLI with the following flags:
-#   tini: Lightweight init system to properly reap zombie processes and
-#         forward signals to child processes (MCP servers)
-#   --dangerously-skip-permissions: Skip all safety prompts (use with caution)
-#   --allow-dangerously-skip-permissions: Confirm permission bypass
-#   --ide: Enable IDE integration features
-#   --mcp-config: Specify MCP server configuration file path
+# /entrypoint.sh handles:
+#   1. First-run plugin seeding (rust-analyzer-lsp) into the persistent volume
+#   2. Launching Claude Code via tini with standard flags
 # ============================================================================
-ENTRYPOINT [ "/sbin/tini", "--", "/usr/local/bin/claude", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--ide", "--mcp-config", "/mcp.json" ]
+ENTRYPOINT [ "/entrypoint.sh" ]
