@@ -39,6 +39,7 @@ RUN apk add --no-cache \
     nodejs \
     npm \
     python3 \
+    uv \
     py3-pip \
     ca-certificates \
     openssh-client \
